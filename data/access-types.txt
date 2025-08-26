@@ -11,4 +11,4 @@
 #
 # Add your MAC address access types below:
 
-UNLIMITED
+88:66:5a:46:b0:d0:unlimited
