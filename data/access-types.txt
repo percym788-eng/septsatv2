@@ -1,0 +1,12 @@
+# Access Types Configuration
+# Format: mac_address:access_type
+# Available access types: trial, unlimited, admin
+# If a MAC address is not listed here, it defaults to "trial"
+# Lines starting with # are comments and will be ignored
+#
+# Examples:
+# aa:bb:cc:dd:ee:ff:unlimited
+# 11:22:33:44:55:66:admin
+# 99:88:77:66:55:44:trial
+#
+# Add your MAC address access types below:
