@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAT Helper - MAC Authentication System - nigga i gpt'd this page ngl</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .header {
+            margin-bottom: 30px;
+        }
+        
+        .logo {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .feature:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
+        .feature h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .download-section {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: white;
+            color: #28a745;
+            padding: 15px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 10px;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+        
+        .download-btn:hover {
+            background: transparent;
+            color: white;
+            border-color: white;
+            transform: translateY(-3px);
+        }
+        
+        .status {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .api-info {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+            color: #6c757d;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🎓</div>
+            <h1>SAT Helper</h1>
+            <p class="subtitle">MAC Address Authentication System</p>
+            <div class="status">🟢 System Online</div>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <span class="feature-icon">🔐</span>
+                <h3>Secure Access</h3>
+                <p>Device-based authentication using MAC address whitelisting. No passwords or complex logins required.</p>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">⚡</span>
+                <h3>Instant Launch</h3>
+                <p>Authorized devices get immediate access. SAT Helper launches automatically when whitelisted.</p>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">🎯</span>
+                <h3>Simple & Reliable</h3>
+                <p>No user accounts needed. Just run the client and get instant access if your device is authorized.</p>
+            </div>
+        </div>
+        
+        <div class="download-section">
+            <h2>📱 Get Access</h2>
+            <p>Download the client and get instant access if your device is authorized:</p>
+            <a href="#" class="download-btn" onclick="showUserInstructions()">📥 Access Instructions</a>
+        </div>
+        
+        <div class="api-info">
+            <strong>🌐 API Status:</strong> Ready<br>
+            <strong>🔧 Version:</strong> 1.0.0<br>
+            <strong>📊 Authentication:</strong> MAC Address Whitelist<br>
+            <strong>⚙️ System:</strong> Online
+        </div>
+        
+        <div class="warning">
+            <strong>⚠️ Important:</strong> This is a private system. Only authorized devices can access SAT Helper. Contact the administrator if you need access.
+        </div>
+        
+        <div class="footer">
+            <p>🔒 Secure • 🚀 Fast • 💯 Reliable</p>
+            <p>MAC Address Authentication System - No user accounts needed!</p>
+        </div>
+    </div>
+
+    <script>
+        function showUserInstructions() {
+            alert(`👤 USER INSTRUCTIONS:
+
+1. Download: sat-launcher-mac.cjs
+2. Run: node sat-launcher-mac.cjs
+3. If authorized: SAT Helper launches automatically!
+4. If not authorized: Send displayed MAC addresses to administrator
+
+📱 Your MAC addresses will be shown if access is denied.
+Contact the administrator to get whitelisted.`);
+        }
+
+        // Add some interactive elements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate status indicator
+            const status = document.querySelector('.status');
+            setInterval(() => {
+                status.style.transform = status.style.transform === 'scale(1.05)' ? 'scale(1)' : 'scale(1.05)';
+            }, 2000);
+
+            // Add click effects to features
+            const features = document.querySelectorAll('.feature');
+            features.forEach(feature => {
+                feature.addEventListener('click', function() {
+                    this.style.transform = 'scale(0.98)';
+                    setTimeout(() => {
+                        this.style.transform = 'translateY(-5px)';
+                    }, 150);
+                });
+            });
+
+            console.log('🎓 SAT Helper MAC Authentication System');
+            console.log('🌐 API Endpoint: /api/mac-auth');
+            console.log('📱 Ready for MAC address authentication');
+        });
+    </script>
+</body>
+</html>
