@@ -1,0 +1,9 @@
+# MAC Address Whitelist
+# Add one MAC address per line (format: xx:xx:xx:xx:xx:xx)
+# Lines starting with # are comments and will be ignored
+# 
+# Example:
+# aa:bb:cc:dd:ee:ff
+# 11:22:33:44:55:66
+#
+# Add your MAC addresses below:
