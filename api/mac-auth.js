@@ -29,7 +29,7 @@ async function loadMACAddresses() {
             .map(line => line.trim().toLowerCase())
             .filter(line => line && !line.startsWith('#'));
         
-        // Load access types (format: mac_address:access_type)
+        // Load access types (format: mac_address=access_type)
         let accessTypes = new Map();
         try {
             const accessData = await fs.readFile(ACCESS_TYPES_FILE, 'utf8');
@@ -38,7 +38,7 @@ async function loadMACAddresses() {
                 .map(line => line.trim())
                 .filter(line => line && !line.startsWith('#'))
                 .forEach(line => {
-                    const [mac, type] = line.split(':');
+                    const [mac, type] = line.split('='); // Changed from ':' to '='
                     if (mac && type) {
                         accessTypes.set(mac.toLowerCase(), type.trim());
                     }
@@ -53,6 +53,7 @@ async function loadMACAddresses() {
         lastCacheTime = now;
         
         console.log(`Loaded ${macAddresses.length} MAC addresses from file`);
+        console.log(`Loaded ${accessTypes.size} access type entries`); // Added debug log
         return { macAddresses: macCache, accessTypes: accessTypeCache };
         
     } catch (error) {
@@ -117,6 +118,7 @@ async function handleHealthCheck(req, res) {
         message: 'API is healthy',
         data: {
             totalMACs: macAddresses.size,
+            totalAccessTypes: accessTypes.size, // Added this for debugging
             cacheAge: Date.now() - lastCacheTime,
             timestamp: new Date().toISOString()
         }
@@ -156,6 +158,10 @@ async function handleCheckAccess(req, res) {
     
     // Get access type (default to trial if not specified)
     const accessType = accessTypes.get(authorizedMac) || 'trial';
+    
+    // Debug logging
+    console.log(`MAC: ${authorizedMac}, Access Type: ${accessType}`);
+    console.log(`Access types map:`, Array.from(accessTypes.entries()));
     
     return res.status(200).json({
         success: true,
