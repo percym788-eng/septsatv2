@@ -1,4 +1,4 @@
-// api/clipboard.js - Screenshot Clipboard Management API
+ // api/clipboard.js - Screenshot Clipboard Management API
 import fs from 'fs/promises';
 import path from 'path';
 
