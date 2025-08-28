@@ -356,50 +356,76 @@ async function handleGetScreenshot(req, res) {
     }
 
     try {
-        // Sync data first
-        await syncUserDataFromBlobs();
-
-        // Check if user exists
-        if (!clipboardIndex.users[userId]) {
+        console.log(`Fetching screenshot: ${screenshotId} for user: ${userId}`);
+        
+        // First, try to find screenshot directly from blob storage
+        const { blobs } = await list();
+        const screenshotPath = `screenshots/${userId}/${screenshotId}.png`;
+        
+        console.log(`Looking for blob path: ${screenshotPath}`);
+        
+        const screenshotBlob = blobs.find(blob => blob.pathname === screenshotPath);
+        
+        if (!screenshotBlob) {
+            console.log(`Screenshot blob not found. Available blobs for user ${userId}:`, 
+                blobs.filter(b => b.pathname.startsWith(`screenshots/${userId}/`)).map(b => b.pathname)
+            );
             return res.status(404).json({
                 success: false,
-                message: 'User not found'
+                message: 'Screenshot not found in storage'
             });
         }
 
-        // Find the screenshot in the user's screenshots
-        const screenshot = clipboardIndex.users[userId].screenshots.find(s => s.id === screenshotId);
-        
-        if (!screenshot) {
-            return res.status(404).json({
-                success: false,
-                message: 'Screenshot not found'
-            });
+        console.log(`Found blob: ${screenshotBlob.url}`);
+
+        // For direct image serving, we can redirect to the blob URL
+        // This is more efficient than fetching and re-serving
+        if (req.query.direct === 'true') {
+            return res.redirect(302, screenshotBlob.url);
         }
 
-        // Fetch the image data from the blob URL
-        const imageResponse = await fetch(screenshot.blobUrl);
-        if (!imageResponse.ok) {
-            return res.status(404).json({
-                success: false,
-                message: 'Screenshot file not accessible'
+        // Or fetch and serve the image (for cases where we need to add headers)
+        try {
+            const imageResponse = await fetch(screenshotBlob.url);
+            if (!imageResponse.ok) {
+                console.log(`Failed to fetch image from blob URL: ${imageResponse.status} ${imageResponse.statusText}`);
+                return res.status(404).json({
+                    success: false,
+                    message: 'Screenshot file not accessible from blob storage'
+                });
+            }
+
+            const imageBuffer = await imageResponse.arrayBuffer();
+            
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Content-Length', imageBuffer.byteLength);
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('Content-Disposition', `inline; filename="${screenshotId}.png"`);
+            
+            return res.status(200).send(Buffer.from(imageBuffer));
+            
+        } catch (fetchError) {
+            console.error('Error fetching image from blob URL:', fetchError);
+            // Fallback: return the direct blob URL as JSON
+            return res.status(200).json({
+                success: true,
+                message: 'Screenshot found - use direct URL',
+                screenshotId: screenshotId,
+                userId: userId,
+                blobUrl: screenshotBlob.url,
+                size: screenshotBlob.size,
+                uploadedAt: screenshotBlob.uploadedAt
             });
         }
-
-        const imageBuffer = await imageResponse.arrayBuffer();
-        
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Content-Length', imageBuffer.byteLength);
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        
-        return res.status(200).send(Buffer.from(imageBuffer));
         
     } catch (error) {
         console.error('Error fetching screenshot:', error);
         return res.status(500).json({
             success: false,
             message: 'Failed to retrieve screenshot',
-            error: error.message
+            error: error.message,
+            screenshotId: screenshotId,
+            userId: userId
         });
     }
 }
