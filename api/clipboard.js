@@ -340,24 +340,45 @@ async function handleGetScreenshot(req, res) {
         });
     }
 
-    if (!clipboardIndex.users[userId]) {
-        return res.status(404).json({
+    try {
+        // Get all blobs and find the specific screenshot
+        const { blobs } = await list();
+        const screenshotBlob = blobs.find(blob => 
+            blob.pathname === `screenshots/${userId}/${screenshotId}.png`
+        );
+
+        if (!screenshotBlob) {
+            return res.status(404).json({
+                success: false,
+                message: 'Screenshot not found'
+            });
+        }
+
+        // Fetch the image data from the blob URL
+        const imageResponse = await fetch(screenshotBlob.url);
+        if (!imageResponse.ok) {
+            return res.status(404).json({
+                success: false,
+                message: 'Screenshot file not accessible'
+            });
+        }
+
+        const imageBuffer = await imageResponse.arrayBuffer();
+        
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Length', imageBuffer.byteLength);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        
+        return res.status(200).send(Buffer.from(imageBuffer));
+        
+    } catch (error) {
+        console.error('Error fetching screenshot:', error);
+        return res.status(500).json({
             success: false,
-            message: 'User not found'
+            message: 'Failed to retrieve screenshot',
+            error: error.message
         });
     }
-
-    const screenshot = clipboardIndex.users[userId].screenshots.find(s => s.id === screenshotId);
-    
-    if (!screenshot) {
-        return res.status(404).json({
-            success: false,
-            message: 'Screenshot not found'
-        });
-    }
-
-    // Redirect to the Blob URL (images are publicly accessible)
-    return res.redirect(302, screenshot.blobUrl);
 }
 
 // Delete specific screenshot (clipboard admin access required)
