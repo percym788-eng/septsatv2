@@ -191,26 +191,61 @@ async function handleListUsers(req, res) {
         });
     }
 
-    const userList = Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
-        userId: userId,
-        username: userData.username,
-        deviceInfo: userData.deviceInfo,
-        totalScreenshots: userData.screenshots.length,
-        firstSeen: userData.firstSeen,
-        lastActive: userData.lastActive,
-        latestScreenshot: userData.screenshots.length > 0 ? 
-            userData.screenshots[userData.screenshots.length - 1].uploadedAt : null
-    }));
+    try {
+        // Get all blobs from storage
+        const { blobs } = await list();
+        
+        // Extract unique user IDs from blob paths
+        const userIds = [...new Set(
+            blobs
+                .filter(blob => blob.pathname.startsWith('screenshots/'))
+                .map(blob => blob.pathname.split('/')[1])
+                .filter(userId => userId && userId !== '')
+        )];
 
-    return res.status(200).json({
-        success: true,
-        message: 'Users retrieved successfully',
-        data: {
-            users: userList,
-            totalUsers: userList.length,
-            totalScreenshots: clipboardIndex.totalScreenshots
-        }
-    });
+        const userList = userIds.map(userId => {
+            // Get user blobs
+            const userBlobs = blobs.filter(blob => 
+                blob.pathname.startsWith(`screenshots/${userId}/`)
+            );
+
+            // Get user data from memory or create fallback
+            const userData = clipboardIndex.users[userId] || {
+                username: userId,
+                deviceInfo: {},
+                firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
+                lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString()
+            };
+
+            return {
+                userId: userId,
+                username: userData.username,
+                deviceInfo: userData.deviceInfo,
+                totalScreenshots: userBlobs.length,
+                firstSeen: userData.firstSeen,
+                lastActive: userData.lastActive,
+                latestScreenshot: userBlobs.length > 0 ? 
+                    userBlobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0].uploadedAt : null
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Users retrieved successfully',
+            data: {
+                users: userList,
+                totalUsers: userList.length,
+                totalScreenshots: blobs.filter(blob => blob.pathname.startsWith('screenshots/')).length
+            }
+        });
+    } catch (error) {
+        console.error('Error listing users:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve users',
+            error: error.message
+        });
+    }
 }
 
 // Get screenshots for a specific user (clipboard admin access required)
@@ -230,26 +265,62 @@ async function handleGetUserScreenshots(req, res) {
         });
     }
 
-    if (!clipboardIndex.users[userId]) {
-        return res.status(404).json({
+    try {
+        // Get all blobs from storage
+        const { blobs } = await list();
+        
+        // Filter blobs for this specific user
+        const userBlobs = blobs.filter(blob => 
+            blob.pathname.startsWith(`screenshots/${userId}/`)
+        );
+
+        // Sort by upload time (most recent first)
+        userBlobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+
+        // Format the response
+        const screenshots = userBlobs.map(blob => {
+            const fileName = blob.pathname.split('/').pop();
+            const screenshotId = fileName.replace('.png', '');
+            
+            return {
+                id: screenshotId,
+                filename: blob.pathname,
+                uploadedAt: blob.uploadedAt,
+                size: blob.size,
+                blobUrl: blob.url,
+                timestamp: new Date(blob.uploadedAt).getTime()
+            };
+        });
+
+        // Check if user exists in memory or create basic info
+        let userData = clipboardIndex.users[userId] || {
+            username: userId, // fallback to userId if no username stored
+            deviceInfo: {},
+            screenshots: [],
+            firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
+            lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString(),
+            totalScreenshots: userBlobs.length
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: 'User screenshots retrieved successfully',
+            data: {
+                userId: userId,
+                username: userData.username,
+                deviceInfo: userData.deviceInfo,
+                screenshots: screenshots,
+                totalScreenshots: screenshots.length
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching user screenshots:', error);
+        return res.status(500).json({
             success: false,
-            message: 'User not found'
+            message: 'Failed to retrieve user screenshots',
+            error: error.message
         });
     }
-
-    const userData = clipboardIndex.users[userId];
-    
-    return res.status(200).json({
-        success: true,
-        message: 'User screenshots retrieved successfully',
-        data: {
-            userId: userId,
-            username: userData.username,
-            deviceInfo: userData.deviceInfo,
-            screenshots: userData.screenshots.slice().reverse(), // Most recent first
-            totalScreenshots: userData.screenshots.length
-        }
-    });
 }
 
 // Get specific screenshot (clipboard admin access required)
