@@ -33,7 +33,7 @@ let clipboardIndex = {
 export default async function handler(req, res) {
     // Handle CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Key');
     
     if (req.method === 'OPTIONS') {
@@ -182,17 +182,9 @@ async function handleScreenshotUpload(req, res) {
     }
 }
 
-// List all users (clipboard admin access required)
-async function handleListUsers(req, res) {
-    if (!validateClipboardAccess(req)) {
-        return res.status(403).json({
-            success: false,
-            message: 'Clipboard access denied. Correct admin key required.'
-        });
-    }
-
+// Sync in-memory data with blob storage (helper function)
+async function syncUserDataFromBlobs() {
     try {
-        // Get all blobs from storage
         const { blobs } = await list();
         
         // Extract unique user IDs from blob paths
@@ -203,31 +195,77 @@ async function handleListUsers(req, res) {
                 .filter(userId => userId && userId !== '')
         )];
 
-        const userList = userIds.map(userId => {
-            // Get user blobs
+        // Sync each user's data
+        for (const userId of userIds) {
             const userBlobs = blobs.filter(blob => 
                 blob.pathname.startsWith(`screenshots/${userId}/`)
             );
 
-            // Get user data from memory or create fallback
-            const userData = clipboardIndex.users[userId] || {
-                username: userId,
-                deviceInfo: {},
-                firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
-                lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString()
-            };
+            // If user doesn't exist in memory, create them
+            if (!clipboardIndex.users[userId]) {
+                clipboardIndex.users[userId] = {
+                    username: userId, // fallback
+                    deviceInfo: {},
+                    screenshots: [],
+                    firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
+                    lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString(),
+                    totalScreenshots: userBlobs.length
+                };
+            }
 
-            return {
-                userId: userId,
-                username: userData.username,
-                deviceInfo: userData.deviceInfo,
-                totalScreenshots: userBlobs.length,
-                firstSeen: userData.firstSeen,
-                lastActive: userData.lastActive,
-                latestScreenshot: userBlobs.length > 0 ? 
-                    userBlobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0].uploadedAt : null
-            };
+            // Sync screenshots from blobs to memory
+            clipboardIndex.users[userId].screenshots = userBlobs
+                .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+                .map(blob => {
+                    const fileName = blob.pathname.split('/').pop();
+                    const screenshotId = fileName.replace('.png', '');
+                    
+                    return {
+                        id: screenshotId,
+                        filename: blob.pathname,
+                        timestamp: new Date(blob.uploadedAt).getTime(),
+                        uploadedAt: blob.uploadedAt,
+                        accessType: 'Unknown', // Default since we don't have this info from blob
+                        sessionInfo: {},
+                        size: blob.size,
+                        blobUrl: blob.url
+                    };
+                });
+
+            clipboardIndex.users[userId].totalScreenshots = userBlobs.length;
+        }
+
+        clipboardIndex.totalScreenshots = blobs.filter(blob => blob.pathname.startsWith('screenshots/')).length;
+        clipboardIndex.lastUpdated = new Date().toISOString();
+
+    } catch (error) {
+        console.error('Error syncing user data from blobs:', error);
+    }
+}
+
+// List all users (clipboard admin access required)
+async function handleListUsers(req, res) {
+    if (!validateClipboardAccess(req)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Clipboard access denied. Correct admin key required.'
         });
+    }
+
+    try {
+        // Sync data from blob storage first
+        await syncUserDataFromBlobs();
+
+        const userList = Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
+            userId: userId,
+            username: userData.username,
+            deviceInfo: userData.deviceInfo,
+            totalScreenshots: userData.screenshots.length,
+            firstSeen: userData.firstSeen,
+            lastActive: userData.lastActive,
+            latestScreenshot: userData.screenshots.length > 0 ? 
+                userData.screenshots[0].uploadedAt : null
+        }));
 
         return res.status(200).json({
             success: true,
@@ -235,7 +273,7 @@ async function handleListUsers(req, res) {
             data: {
                 users: userList,
                 totalUsers: userList.length,
-                totalScreenshots: blobs.filter(blob => blob.pathname.startsWith('screenshots/')).length
+                totalScreenshots: clipboardIndex.totalScreenshots
             }
         });
     } catch (error) {
@@ -266,41 +304,18 @@ async function handleGetUserScreenshots(req, res) {
     }
 
     try {
-        // Get all blobs from storage
-        const { blobs } = await list();
-        
-        // Filter blobs for this specific user
-        const userBlobs = blobs.filter(blob => 
-            blob.pathname.startsWith(`screenshots/${userId}/`)
-        );
+        // Sync data from blob storage first
+        await syncUserDataFromBlobs();
 
-        // Sort by upload time (most recent first)
-        userBlobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+        // Check if user exists after sync
+        if (!clipboardIndex.users[userId]) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
 
-        // Format the response
-        const screenshots = userBlobs.map(blob => {
-            const fileName = blob.pathname.split('/').pop();
-            const screenshotId = fileName.replace('.png', '');
-            
-            return {
-                id: screenshotId,
-                filename: blob.pathname,
-                uploadedAt: blob.uploadedAt,
-                size: blob.size,
-                blobUrl: blob.url,
-                timestamp: new Date(blob.uploadedAt).getTime()
-            };
-        });
-
-        // Check if user exists in memory or create basic info
-        let userData = clipboardIndex.users[userId] || {
-            username: userId, // fallback to userId if no username stored
-            deviceInfo: {},
-            screenshots: [],
-            firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
-            lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString(),
-            totalScreenshots: userBlobs.length
-        };
+        const userData = clipboardIndex.users[userId];
 
         return res.status(200).json({
             success: true,
@@ -309,8 +324,8 @@ async function handleGetUserScreenshots(req, res) {
                 userId: userId,
                 username: userData.username,
                 deviceInfo: userData.deviceInfo,
-                screenshots: screenshots,
-                totalScreenshots: screenshots.length
+                screenshots: userData.screenshots,
+                totalScreenshots: userData.screenshots.length
             }
         });
     } catch (error) {
@@ -341,13 +356,21 @@ async function handleGetScreenshot(req, res) {
     }
 
     try {
-        // Get all blobs and find the specific screenshot
-        const { blobs } = await list();
-        const screenshotBlob = blobs.find(blob => 
-            blob.pathname === `screenshots/${userId}/${screenshotId}.png`
-        );
+        // Sync data first
+        await syncUserDataFromBlobs();
 
-        if (!screenshotBlob) {
+        // Check if user exists
+        if (!clipboardIndex.users[userId]) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Find the screenshot in the user's screenshots
+        const screenshot = clipboardIndex.users[userId].screenshots.find(s => s.id === screenshotId);
+        
+        if (!screenshot) {
             return res.status(404).json({
                 success: false,
                 message: 'Screenshot not found'
@@ -355,7 +378,7 @@ async function handleGetScreenshot(req, res) {
         }
 
         // Fetch the image data from the blob URL
-        const imageResponse = await fetch(screenshotBlob.url);
+        const imageResponse = await fetch(screenshot.blobUrl);
         if (!imageResponse.ok) {
             return res.status(404).json({
                 success: false,
@@ -390,7 +413,7 @@ async function handleDeleteScreenshot(req, res) {
         });
     }
 
-    const { screenshotId, userId } = req.body;
+    const { screenshotId, userId } = req.method === 'DELETE' ? req.query : req.body;
     if (!screenshotId || !userId) {
         return res.status(400).json({
             success: false,
@@ -399,6 +422,9 @@ async function handleDeleteScreenshot(req, res) {
     }
 
     try {
+        // Sync data first
+        await syncUserDataFromBlobs();
+
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
                 success: false,
@@ -422,10 +448,12 @@ async function handleDeleteScreenshot(req, res) {
             await del(screenshot.blobUrl);
         } catch (error) {
             console.log(`Could not delete screenshot file from Blob: ${screenshot.filename}`);
+            // Continue anyway to clean up memory
         }
 
         // Remove from index
         clipboardIndex.users[userId].screenshots.splice(screenshotIndex, 1);
+        clipboardIndex.users[userId].totalScreenshots--;
         clipboardIndex.totalScreenshots--;
         clipboardIndex.lastUpdated = new Date().toISOString();
 
@@ -435,6 +463,7 @@ async function handleDeleteScreenshot(req, res) {
         });
 
     } catch (error) {
+        console.error('Error deleting screenshot:', error);
         return res.status(500).json({
             success: false,
             message: 'Failed to delete screenshot',
@@ -461,6 +490,9 @@ async function handleClearUserClipboard(req, res) {
     }
 
     try {
+        // Sync data first
+        await syncUserDataFromBlobs();
+
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
                 success: false,
@@ -469,6 +501,7 @@ async function handleClearUserClipboard(req, res) {
         }
 
         const screenshots = clipboardIndex.users[userId].screenshots;
+        const screenshotCount = screenshots.length;
         
         // Delete all screenshot files from Blob for this user
         for (const screenshot of screenshots) {
@@ -480,16 +513,18 @@ async function handleClearUserClipboard(req, res) {
         }
 
         // Update index
-        clipboardIndex.totalScreenshots -= screenshots.length;
+        clipboardIndex.totalScreenshots -= screenshotCount;
         clipboardIndex.users[userId].screenshots = [];
+        clipboardIndex.users[userId].totalScreenshots = 0;
         clipboardIndex.lastUpdated = new Date().toISOString();
 
         return res.status(200).json({
             success: true,
-            message: `Cleared ${screenshots.length} screenshots for user ${userId}`
+            message: `Cleared ${screenshotCount} screenshots for user ${userId}`
         });
 
     } catch (error) {
+        console.error('Error clearing user clipboard:', error);
         return res.status(500).json({
             success: false,
             message: 'Failed to clear user clipboard',
@@ -507,33 +542,56 @@ async function handleGetStats(req, res) {
         });
     }
 
-    const stats = {
-        totalUsers: Object.keys(clipboardIndex.users).length,
-        totalScreenshots: clipboardIndex.totalScreenshots,
-        lastUpdated: clipboardIndex.lastUpdated,
-        userStats: Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
-            userId,
-            username: userData.username,
-            screenshotCount: userData.screenshots.length,
-            lastActive: userData.lastActive,
-            deviceInfo: userData.deviceInfo
-        }))
-    };
+    try {
+        // Sync data first
+        await syncUserDataFromBlobs();
 
-    return res.status(200).json({
-        success: true,
-        message: 'Statistics retrieved successfully',
-        data: stats
-    });
+        const stats = {
+            totalUsers: Object.keys(clipboardIndex.users).length,
+            totalScreenshots: clipboardIndex.totalScreenshots,
+            lastUpdated: clipboardIndex.lastUpdated,
+            userStats: Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
+                userId,
+                username: userData.username,
+                screenshotCount: userData.screenshots.length,
+                lastActive: userData.lastActive,
+                deviceInfo: userData.deviceInfo
+            }))
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: 'Statistics retrieved successfully',
+            data: stats
+        });
+    } catch (error) {
+        console.error('Error getting stats:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve statistics',
+            error: error.message
+        });
+    }
 }
 
 // Simple health check
 async function handleHealthCheck(req, res) {
-    return res.status(200).json({
-        success: true,
-        message: 'Clipboard API is healthy',
-        timestamp: new Date().toISOString(),
-        totalUsers: Object.keys(clipboardIndex.users).length,
-        totalScreenshots: clipboardIndex.totalScreenshots
-    });
+    try {
+        // Quick sync for health check
+        await syncUserDataFromBlobs();
+        
+        return res.status(200).json({
+            success: true,
+            message: 'Clipboard API is healthy',
+            timestamp: new Date().toISOString(),
+            totalUsers: Object.keys(clipboardIndex.users).length,
+            totalScreenshots: clipboardIndex.totalScreenshots
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Health check failed',
+            error: error.message
+        });
+    }
 }
