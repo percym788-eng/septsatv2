@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAT Helper - Screenshot Clipboard</title>
+    <title>SAT Helper - OCR Enhanced Clipboard</title>
     <style>
         * {
             margin: 0;
@@ -31,6 +31,12 @@
             margin-bottom: 10px;
             color: #fff;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .header .subtitle {
+            text-align: center;
+            opacity: 0.8;
+            font-size: 1.1em;
         }
         
         .lock-section {
@@ -113,7 +119,7 @@
         
         .main-content {
             padding: 20px;
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
         }
         
@@ -139,9 +145,77 @@
             color: #4CAF50;
         }
         
+        .top-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .admin-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .admin-badge {
+            background: #4CAF50;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .search-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .search-input {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            min-width: 200px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .view-toggle {
+            display: flex;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .view-toggle button {
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .view-toggle button.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
         .user-list {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
             gap: 20px;
         }
         
@@ -179,11 +253,21 @@
             opacity: 0.8;
         }
         
-        .screenshot-count {
+        .data-counts {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .count-badge {
             background: #4CAF50;
-            padding: 8px 12px;
-            border-radius: 20px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
             font-weight: bold;
+        }
+        
+        .ocr-badge {
+            background: #2196F3;
         }
         
         .device-info {
@@ -194,14 +278,45 @@
             font-size: 0.9em;
         }
         
-        .screenshots-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        .content-tabs {
+            display: flex;
             gap: 10px;
             margin-top: 15px;
         }
         
-        .screenshot-thumb {
+        .tab-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .tab-button.active {
+            background: #4CAF50;
+        }
+        
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .tab-button.active:hover {
+            background: #45a049;
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .content-item {
             aspect-ratio: 16/10;
             background: rgba(0, 0, 0, 0.3);
             border-radius: 8px;
@@ -209,21 +324,26 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 5px;
         }
         
-        .screenshot-thumb:hover {
+        .content-item:hover {
             transform: scale(1.05);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
         }
         
-        .screenshot-thumb img {
+        .content-item img {
             width: 100%;
             height: 100%;
             object-fit: cover;
             border-radius: 8px;
         }
         
-        .screenshot-overlay {
+        .content-overlay {
             position: absolute;
             bottom: 0;
             left: 0;
@@ -233,6 +353,31 @@
             font-size: 0.7em;
             padding: 5px;
             text-align: center;
+        }
+        
+        .ocr-item {
+            background: rgba(33, 150, 243, 0.2);
+            border: 2px solid rgba(33, 150, 243, 0.3);
+            flex-direction: column;
+            justify-content: flex-start;
+            aspect-ratio: 1;
+        }
+        
+        .ocr-preview {
+            font-size: 0.7em;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            margin-bottom: 5px;
+        }
+        
+        .ocr-stats {
+            font-size: 0.6em;
+            opacity: 0.8;
+            margin-top: auto;
         }
         
         .modal {
@@ -257,9 +402,31 @@
         
         .modal img {
             max-width: 100%;
-            max-height: 80vh;
+            max-height: 60vh;
             border-radius: 10px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-text-content {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: left;
+        }
+        
+        .text-display {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .close {
@@ -287,6 +454,16 @@
             text-align: center;
         }
         
+        .success-message {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            color: #4CAF50;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
         .loading {
             text-align: center;
             padding: 50px;
@@ -298,6 +475,7 @@
             display: flex;
             gap: 10px;
             margin-top: 15px;
+            flex-wrap: wrap;
         }
         
         .btn-small {
@@ -310,6 +488,7 @@
             font-size: 0.9em;
             transition: all 0.3s ease;
             flex: 1;
+            min-width: 120px;
         }
         
         .btn-small:hover {
@@ -325,41 +504,68 @@
             background: rgba(244, 67, 54, 0.3);
         }
         
-        .top-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: rgba(0, 0, 0, 0.2);
+        .search-results {
+            margin-bottom: 30px;
+        }
+        
+        .search-result-item {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
             border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
         
-        .admin-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .search-result-item:hover {
+            background: rgba(255, 215, 0, 0.2);
+            transform: translateY(-2px);
         }
         
-        .admin-badge {
-            background: #4CAF50;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9em;
+        .search-highlight {
+            background: rgba(255, 215, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 3px;
             font-weight: bold;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            opacity: 0.6;
+        }
+        
+        @media (max-width: 768px) {
+            .top-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-container {
+                justify-content: center;
+            }
+            
+            .user-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .content-grid {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>SAT Helper - Screenshot Clipboard</h1>
-        <p style="text-align: center; opacity: 0.8;">Secure admin access to monitor device screenshots</p>
+        <h1>SAT Helper - OCR Enhanced Clipboard</h1>
+        <p class="subtitle">Advanced screenshot and OCR data monitoring system</p>
     </div>
 
     <div id="lockSection" class="lock-section">
         <div class="lock-icon">🔒</div>
         <h2>Secure Access Required</h2>
-        <p style="margin-bottom: 25px; opacity: 0.9;">Enter your admin key to access the screenshot clipboard</p>
+        <p style="margin-bottom: 25px; opacity: 0.9;">Enter your admin key to access the enhanced clipboard system</p>
         <form id="accessForm">
             <div class="form-group">
                 <label for="adminKey">Admin Key:</label>
@@ -367,9 +573,9 @@
             </div>
             <div class="form-group">
                 <label for="serverUrl">Server URL:</label>
-                <input type="text" id="serverUrl" placeholder="https://septsatv1.vercel.app" value="https://septsatv1.vercel.app">
+                <input type="text" id="serverUrl" placeholder="https://septsatv6.vercel.app" value="https://septsatv6.vercel.app">
             </div>
-            <button type="submit" class="btn">🔓 Access Clipboard</button>
+            <button type="submit" class="btn">🔓 Access Enhanced Clipboard</button>
         </form>
         <div id="accessError" class="error-message" style="display: none;"></div>
     </div>
@@ -378,7 +584,12 @@
         <div class="top-controls">
             <div class="admin-info">
                 <div class="admin-badge">🔑 Admin Access</div>
-                <span>Screenshot Clipboard System</span>
+                <span>OCR Enhanced Clipboard System</span>
+            </div>
+            <div class="search-container">
+                <input type="text" class="search-input" id="searchInput" placeholder="Search OCR text..." />
+                <button class="btn-small" onclick="performSearch()">🔍 Search</button>
+                <button class="btn-small" onclick="clearSearch()">✕ Clear</button>
             </div>
             <div class="actions" style="margin: 0;">
                 <button class="btn-small" onclick="refreshData()">🔄 Refresh</button>
@@ -393,12 +604,27 @@
             </div>
             <div class="stat-card">
                 <h3 id="totalScreenshots">0</h3>
-                <p>Total Screenshots</p>
+                <p>Screenshots</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="totalOcrEntries">0</h3>
+                <p>OCR Entries</p>
             </div>
             <div class="stat-card">
                 <h3 id="lastUpdated">-</h3>
                 <p>Last Activity</p>
             </div>
+        </div>
+
+        <div id="searchResults" class="search-results" style="display: none;">
+            <h3>Search Results</h3>
+            <div id="searchResultsList"></div>
+        </div>
+
+        <div class="view-toggle">
+            <button class="active" onclick="showAllData()">📊 All Data</button>
+            <button onclick="showScreenshotsOnly()">📸 Screenshots Only</button>
+            <button onclick="showOcrOnly()">📝 OCR Only</button>
         </div>
 
         <div id="userList" class="user-list">
@@ -407,37 +633,36 @@
     </div>
 
     <div id="loadingSection" class="loading" style="display: none;">
-        <p>🔍 Loading clipboard data...</p>
+        <p>🔍 Loading enhanced clipboard data...</p>
     </div>
 
-    <!-- Screenshot Modal -->
-    <div id="screenshotModal" class="modal">
+    <!-- Content Modal -->
+    <div id="contentModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <img id="modalImage" src="" alt="Screenshot">
-            <div id="screenshotInfo" style="margin-top: 20px; text-align: left; background: rgba(0,0,0,0.5); padding: 15px; border-radius: 8px;">
-                <!-- Screenshot details will be populated here -->
+            <div id="modalContentContainer">
+                <!-- Content will be populated here -->
             </div>
         </div>
     </div>
 
     <script>
-        // Hardcoded admin key for clipboard access
+        // Admin key for clipboard access
         const CLIPBOARD_ADMIN_KEY = '122316';
         
         let currentServerUrl = '';
         let isAuthenticated = false;
+        let currentViewMode = 'all'; // 'all', 'screenshots', 'ocr'
+        let allUserData = [];
         
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if credentials are stored and valid
             const storedUrl = localStorage.getItem('sathelper_clipboard_server_url');
             const storedAuth = localStorage.getItem('sathelper_clipboard_authenticated');
             
             if (storedUrl && storedAuth === 'true') {
                 currentServerUrl = storedUrl;
                 document.getElementById('serverUrl').value = storedUrl;
-                // Auto-authenticate with stored credentials
                 authenticateAndLoadData();
             }
         });
@@ -446,9 +671,8 @@
         document.getElementById('accessForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const adminKey = document.getElementById('adminKey').value;
-            const serverUrl = document.getElementById('serverUrl').value || 'https://septsatv1.vercel.app';
+            const serverUrl = document.getElementById('serverUrl').value || 'https://septsatv6.vercel.app';
             
-            // Validate admin key
             if (adminKey !== CLIPBOARD_ADMIN_KEY) {
                 showAccessError('Invalid admin key. Access denied.');
                 return;
@@ -457,11 +681,17 @@
             currentServerUrl = serverUrl;
             isAuthenticated = true;
             
-            // Store credentials
             localStorage.setItem('sathelper_clipboard_server_url', serverUrl);
             localStorage.setItem('sathelper_clipboard_authenticated', 'true');
             
             authenticateAndLoadData();
+        });
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
         });
 
         // Authenticate and load initial data
@@ -502,17 +732,23 @@
                 throw new Error(result.message);
             }
 
+            allUserData = result.data.users;
             populateUserList(result.data.users);
             updateStats(result.data);
         }
 
-        // Populate user list
+        // Populate user list based on current view mode
         function populateUserList(users) {
             const userList = document.getElementById('userList');
             userList.innerHTML = '';
 
             if (users.length === 0) {
-                userList.innerHTML = '<div style="text-align: center; padding: 50px; opacity: 0.6;"><h3>No users found</h3><p>Screenshots will appear here when devices start using SAT Helper</p></div>';
+                userList.innerHTML = `
+                    <div class="no-data">
+                        <h3>No users found</h3>
+                        <p>Enhanced clipboard data will appear here when devices start using SAT Helper with OCR</p>
+                    </div>
+                `;
                 return;
             }
 
@@ -542,44 +778,58 @@
                             <div>Last Active: ${lastActive}</div>
                         </div>
                     </div>
-                    <div class="screenshot-count">${user.totalScreenshots} screenshots</div>
+                    <div class="data-counts">
+                        <div class="count-badge">${user.totalScreenshots} 📸</div>
+                        <div class="count-badge ocr-badge">${user.totalOcrEntries} 📝</div>
+                    </div>
                 </div>
                 
                 <div class="device-info">
                     <div><strong>Device ID:</strong> ${escapeHtml(user.deviceInfo.deviceId || 'Unknown').substring(0, 16)}...</div>
-                    <div><strong>MAC Addresses:</strong> ${escapeHtml(user.deviceInfo.macAddresses || 'Unknown')}</div>
+                    <div><strong>Access Type:</strong> ${escapeHtml(user.deviceInfo.accessType || 'Unknown')}</div>
                     <div><strong>First Seen:</strong> ${firstSeen}</div>
                 </div>
                 
-                <div class="actions">
-                    <button class="btn-small" onclick="loadUserScreenshots('${user.userId}')">📸 View Screenshots</button>
-                    <button class="btn-small btn-danger" onclick="clearUserClipboard('${user.userId}', '${escapeHtml(user.username)}')">🗑️ Clear All</button>
+                <div class="content-tabs">
+                    <button class="tab-button active" onclick="showUserContent('${user.userId}', 'screenshots', this)">📸 Screenshots</button>
+                    <button class="tab-button" onclick="showUserContent('${user.userId}', 'ocr', this)">📝 OCR Data</button>
                 </div>
                 
-                <div id="screenshots-${user.userId}" class="screenshots-grid" style="display: none;">
-                    <!-- Screenshots will be loaded here -->
+                <div id="content-${user.userId}" class="content-grid" style="display: none;">
+                    <!-- Content will be loaded here -->
+                </div>
+                
+                <div class="actions">
+                    <button class="btn-small btn-danger" onclick="clearUserClipboard('${user.userId}', '${escapeHtml(user.username)}')">🗑️ Clear All Data</button>
                 </div>
             `;
             
             return card;
         }
 
-        // Load screenshots for a specific user
-        async function loadUserScreenshots(userId) {
+        // Show user content (screenshots or OCR)
+        async function showUserContent(userId, contentType, buttonElement) {
             if (!isAuthenticated) return;
             
-            const screenshotsContainer = document.getElementById(`screenshots-${userId}`);
+            const contentContainer = document.getElementById(`content-${userId}`);
+            const tabButtons = buttonElement.parentElement.querySelectorAll('.tab-button');
             
-            if (screenshotsContainer.style.display === 'block') {
-                screenshotsContainer.style.display = 'none';
+            // Update active tab
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            buttonElement.classList.add('active');
+            
+            // Toggle visibility
+            if (contentContainer.style.display === 'block' && buttonElement.classList.contains('active')) {
+                contentContainer.style.display = 'none';
                 return;
             }
             
-            screenshotsContainer.innerHTML = '<div style="text-align: center; padding: 20px;">Loading screenshots...</div>';
-            screenshotsContainer.style.display = 'block';
+            contentContainer.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
+            contentContainer.style.display = 'block';
             
             try {
-                const response = await fetch(`${currentServerUrl}/api/clipboard?action=get-user-screenshots&userId=${encodeURIComponent(userId)}`, {
+                let endpoint = contentType === 'screenshots' ? 'get-user-screenshots' : 'get-user-ocr';
+                const response = await fetch(`${currentServerUrl}/api/clipboard?action=${endpoint}&userId=${encodeURIComponent(userId)}`, {
                     method: 'GET',
                     headers: {
                         'X-Admin-Key': CLIPBOARD_ADMIN_KEY
@@ -591,41 +841,62 @@
                     throw new Error(result.message);
                 }
 
-                populateUserScreenshots(userId, result.data.screenshots);
+                populateUserContent(userId, contentType, result.data);
                 
             } catch (error) {
-                screenshotsContainer.innerHTML = `<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error: ${error.message}</div>`;
+                contentContainer.innerHTML = `<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error: ${error.message}</div>`;
             }
         }
 
-        // Populate screenshots for a user
-        function populateUserScreenshots(userId, screenshots) {
-            const container = document.getElementById(`screenshots-${userId}`);
+        // Populate user content (screenshots or OCR)
+        function populateUserContent(userId, contentType, data) {
+            const container = document.getElementById(`content-${userId}`);
             
-            if (screenshots.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">No screenshots available</div>';
+            const items = contentType === 'screenshots' ? data.screenshots : data.ocrEntries;
+            
+            if (items.length === 0) {
+                container.innerHTML = `<div style="text-align: center; padding: 20px; opacity: 0.6;">No ${contentType} available</div>`;
                 return;
             }
             
             container.innerHTML = '';
             
-            screenshots.forEach(screenshot => {
-                const thumb = document.createElement('div');
-                thumb.className = 'screenshot-thumb';
-                thumb.onclick = () => showScreenshotModal(userId, screenshot);
+            items.forEach(item => {
+                const contentItem = document.createElement('div');
                 
-                const uploadTime = new Date(screenshot.uploadedAt).toLocaleString();
+                if (contentType === 'screenshots') {
+                    contentItem.className = 'content-item';
+                    contentItem.onclick = () => showScreenshotModal(userId, item);
+                    
+                    const uploadTime = new Date(item.uploadedAt).toLocaleString();
+                    
+                    contentItem.innerHTML = `
+                        <img src="${currentServerUrl}/api/clipboard?action=get-screenshot&screenshotId=${item.id}&userId=${encodeURIComponent(userId)}" 
+                             alt="Screenshot ${item.id}"
+                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5FcnJvcjwvdGV4dD48L3N2Zz4='">
+                        <div class="content-overlay">
+                            ${uploadTime}
+                        </div>
+                    `;
+                } else {
+                    contentItem.className = 'content-item ocr-item';
+                    contentItem.onclick = () => showOcrModal(userId, item);
+                    
+                    const uploadTime = new Date(item.uploadedAt).toLocaleString();
+                    
+                    contentItem.innerHTML = `
+                        <div class="ocr-preview">
+                            ${escapeHtml(item.extractedText ? item.extractedText.substring(0, 80) + (item.extractedText.length > 80 ? '...' : '') : 'No text extracted')}
+                        </div>
+                        <div class="ocr-stats">
+                            ${item.wordCount || 0} words<br>
+                            ${item.method || 'unknown'}<br>
+                            ${uploadTime}
+                        </div>
+                    `;
+                }
                 
-                thumb.innerHTML = `
-                    <img src="${currentServerUrl}/api/clipboard?action=get-screenshot&screenshotId=${screenshot.id}&userId=${encodeURIComponent(userId)}" 
-                         alt="Screenshot ${screenshot.id}"
-                         onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5FcnJvcjwvdGV4dD48L3N2Zz4='">
-                    <div class="screenshot-overlay">
-                        ${uploadTime}
-                    </div>
-                `;
-                
-                container.appendChild(thumb);
+                container.appendChild(contentItem);
             });
         }
 
@@ -633,52 +904,225 @@
         function showScreenshotModal(userId, screenshot) {
             if (!isAuthenticated) return;
             
-            const modal = document.getElementById('screenshotModal');
-            const modalImage = document.getElementById('modalImage');
-            const screenshotInfo = document.getElementById('screenshotInfo');
-            
-            modalImage.src = `${currentServerUrl}/api/clipboard?action=get-screenshot&screenshotId=${screenshot.id}&userId=${encodeURIComponent(userId)}`;
+            const modal = document.getElementById('contentModal');
+            const modalContainer = document.getElementById('modalContentContainer');
             
             const uploadTime = new Date(screenshot.uploadedAt).toLocaleString();
             const sessionInfo = screenshot.sessionInfo || {};
             
-            screenshotInfo.innerHTML = `
-                <h3>Screenshot Details</h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
-                    <div>
-                        <strong>Screenshot ID:</strong><br>${screenshot.id}
+            modalContainer.innerHTML = `
+                <img src="${currentServerUrl}/api/clipboard?action=get-screenshot&screenshotId=${screenshot.id}&userId=${encodeURIComponent(userId)}" 
+                     alt="Screenshot ${screenshot.id}" 
+                     style="max-width: 100%; max-height: 60vh; border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);">
+                
+                <div style="background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; margin-top: 20px; text-align: left;">
+                    <h3>Screenshot Details</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+                        <div>
+                            <strong>Screenshot ID:</strong><br>${screenshot.id}
+                        </div>
+                        <div>
+                            <strong>Upload Time:</strong><br>${uploadTime}
+                        </div>
+                        <div>
+                            <strong>Access Type:</strong><br>${screenshot.accessType || 'Unknown'}
+                        </div>
+                        <div>
+                            <strong>File Size:</strong><br>${formatFileSize(screenshot.size || 0)}
+                        </div>
                     </div>
-                    <div>
-                        <strong>Upload Time:</strong><br>${uploadTime}
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-danger" onclick="deleteScreenshot('${userId}', '${screenshot.id}')">Delete Screenshot</button>
                     </div>
-                    <div>
-                        <strong>Access Type:</strong><br>${screenshot.accessType || 'Unknown'}
-                    </div>
-                    <div>
-                        <strong>File Size:</strong><br>${formatFileSize(screenshot.size || 0)}
-                    </div>
-                    <div>
-                        <strong>Session Screenshots:</strong><br>${sessionInfo.screenshots || 0}
-                    </div>
-                    <div>
-                        <strong>Session MCQ Answers:</strong><br>${sessionInfo.mcqAnswers || 0}
-                    </div>
-                </div>
-                <div style="margin-top: 15px;">
-                    <button class="btn btn-danger" onclick="deleteScreenshot('${userId}', '${screenshot.id}')">🗑️ Delete Screenshot</button>
                 </div>
             `;
             
             modal.style.display = 'block';
         }
 
-        // Delete specific screenshot
-        async function deleteScreenshot(userId, screenshotId) {
+        // Show OCR data in modal
+        function showOcrModal(userId, ocrEntry) {
             if (!isAuthenticated) return;
             
-            if (!confirm('Are you sure you want to delete this screenshot?')) {
+            const modal = document.getElementById('contentModal');
+            const modalContainer = document.getElementById('modalContentContainer');
+            
+            const uploadTime = new Date(ocrEntry.uploadedAt).toLocaleString();
+            
+            modalContainer.innerHTML = `
+                <div style="text-align: left;">
+                    <h2>OCR Data Details</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 8px;">
+                        <div>
+                            <strong>OCR ID:</strong><br>${ocrEntry.id}
+                        </div>
+                        <div>
+                            <strong>Upload Time:</strong><br>${uploadTime}
+                        </div>
+                        <div>
+                            <strong>Method:</strong><br>${ocrEntry.method || 'unknown'}
+                        </div>
+                        <div>
+                            <strong>Confidence:</strong><br>${((ocrEntry.confidence || 0) * 100).toFixed(1)}%
+                        </div>
+                        <div>
+                            <strong>Word Count:</strong><br>${ocrEntry.wordCount || 0}
+                        </div>
+                        <div>
+                            <strong>Character Count:</strong><br>${ocrEntry.characterCount || ocrEntry.extractedText?.length || 0}
+                        </div>
+                    </div>
+                    
+                    <h3>Extracted Text</h3>
+                    <div class="text-display">
+${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <button class="btn-small" onclick="copyTextToClipboard(${JSON.stringify(ocrEntry.extractedText || '')})">Copy Text</button>
+                        <button class="btn btn-danger" onclick="deleteOcrEntry('${userId}', '${ocrEntry.id}')">Delete OCR Entry</button>
+                    </div>
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        // Copy text to clipboard
+        function copyTextToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showSuccessMessage('Text copied to clipboard!');
+            }).catch(() => {
+                showErrorMessage('Failed to copy text to clipboard');
+            });
+        }
+
+        // Perform text search
+        async function performSearch() {
+            if (!isAuthenticated) return;
+            
+            const searchQuery = document.getElementById('searchInput').value.trim();
+            if (!searchQuery) {
+                clearSearch();
                 return;
             }
+            
+            showLoading();
+            
+            try {
+                const response = await fetch(`${currentServerUrl}/api/clipboard?action=search-text&query=${encodeURIComponent(searchQuery)}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Admin-Key': CLIPBOARD_ADMIN_KEY
+                    }
+                });
+
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.message);
+                }
+
+                showSearchResults(result.data);
+                showMainContent();
+                
+            } catch (error) {
+                showMainContent();
+                showErrorMessage('Search failed: ' + error.message);
+            }
+        }
+
+        // Show search results
+        function showSearchResults(searchData) {
+            const searchResults = document.getElementById('searchResults');
+            const searchResultsList = document.getElementById('searchResultsList');
+            
+            if (searchData.results.length === 0) {
+                searchResultsList.innerHTML = `
+                    <div class="no-data">
+                        <h3>No results found</h3>
+                        <p>No OCR entries contain "${searchData.searchQuery}"</p>
+                    </div>
+                `;
+            } else {
+                searchResultsList.innerHTML = searchData.results.map(result => `
+                    <div class="search-result-item" onclick="showOcrModal('${result.userId}', ${JSON.stringify(result).replace(/"/g, '&quot;')})">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <div>
+                                <strong>${escapeHtml(result.username)}</strong>
+                                <br><span style="opacity: 0.8; font-size: 0.9em;">${new Date(result.uploadedAt).toLocaleString()}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="background: #4CAF50; padding: 2px 8px; border-radius: 10px; font-size: 0.8em;">
+                                    ${result.matchCount} matches
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.9em;">
+                            ${highlightSearchTerms(escapeHtml(result.matchHighlight), searchData.searchQuery)}
+                        </div>
+                        <div style="margin-top: 8px; font-size: 0.8em; opacity: 0.7;">
+                            ${result.wordCount || 0} words • ${result.method || 'unknown'} • Click to view full text
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            searchResults.style.display = 'block';
+            
+            // Hide user list when showing search results
+            document.getElementById('userList').style.display = 'none';
+        }
+
+        // Highlight search terms in text
+        function highlightSearchTerms(text, searchTerm) {
+            const regex = new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi');
+            return text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+
+        // Clear search results
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('searchResults').style.display = 'none';
+            document.getElementById('userList').style.display = 'grid';
+        }
+
+        // View mode functions
+        function showAllData() {
+            currentViewMode = 'all';
+            updateViewToggle();
+            populateUserList(allUserData);
+        }
+
+        function showScreenshotsOnly() {
+            currentViewMode = 'screenshots';
+            updateViewToggle();
+            const usersWithScreenshots = allUserData.filter(user => user.totalScreenshots > 0);
+            populateUserList(usersWithScreenshots);
+        }
+
+        function showOcrOnly() {
+            currentViewMode = 'ocr';
+            updateViewToggle();
+            const usersWithOcr = allUserData.filter(user => user.totalOcrEntries > 0);
+            populateUserList(usersWithOcr);
+        }
+
+        function updateViewToggle() {
+            const buttons = document.querySelectorAll('.view-toggle button');
+            buttons.forEach((btn, index) => {
+                btn.classList.remove('active');
+                if ((index === 0 && currentViewMode === 'all') ||
+                    (index === 1 && currentViewMode === 'screenshots') ||
+                    (index === 2 && currentViewMode === 'ocr')) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+
+        // Delete functions
+        async function deleteScreenshot(userId, screenshotId) {
+            if (!isAuthenticated || !confirm('Are you sure you want to delete this screenshot?')) return;
             
             try {
                 const response = await fetch(`${currentServerUrl}/api/clipboard?action=delete-screenshot`, {
@@ -696,23 +1140,50 @@
 
                 const result = await response.json();
                 if (result.success) {
-                    document.getElementById('screenshotModal').style.display = 'none';
+                    document.getElementById('contentModal').style.display = 'none';
                     await refreshData();
+                    showSuccessMessage('Screenshot deleted successfully');
                 } else {
-                    alert('Failed to delete screenshot: ' + result.message);
+                    showErrorMessage('Failed to delete screenshot: ' + result.message);
                 }
             } catch (error) {
-                alert('Error deleting screenshot: ' + error.message);
+                showErrorMessage('Error deleting screenshot: ' + error.message);
             }
         }
 
-        // Clear all screenshots for a user
-        async function clearUserClipboard(userId, username) {
-            if (!isAuthenticated) return;
+        async function deleteOcrEntry(userId, ocrId) {
+            if (!isAuthenticated || !confirm('Are you sure you want to delete this OCR entry?')) return;
             
-            if (!confirm(`Are you sure you want to clear ALL screenshots for ${username}? This cannot be undone.`)) {
-                return;
+            try {
+                const response = await fetch(`${currentServerUrl}/api/clipboard?action=delete-ocr`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': CLIPBOARD_ADMIN_KEY
+                    },
+                    body: JSON.stringify({
+                        adminKey: CLIPBOARD_ADMIN_KEY,
+                        userId: userId,
+                        ocrId: ocrId
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('contentModal').style.display = 'none';
+                    await refreshData();
+                    showSuccessMessage('OCR entry deleted successfully');
+                } else {
+                    showErrorMessage('Failed to delete OCR entry: ' + result.message);
+                }
+            } catch (error) {
+                showErrorMessage('Error deleting OCR entry: ' + error.message);
             }
+        }
+
+        // Clear all data for a user
+        async function clearUserClipboard(userId, username) {
+            if (!isAuthenticated || !confirm(`Are you sure you want to clear ALL data for ${username}? This cannot be undone.`)) return;
             
             try {
                 const response = await fetch(`${currentServerUrl}/api/clipboard?action=clear-user-clipboard`, {
@@ -729,13 +1200,13 @@
 
                 const result = await response.json();
                 if (result.success) {
-                    alert('User clipboard cleared successfully');
                     await refreshData();
+                    showSuccessMessage('User clipboard cleared successfully');
                 } else {
-                    alert('Failed to clear clipboard: ' + result.message);
+                    showErrorMessage('Failed to clear clipboard: ' + result.message);
                 }
             } catch (error) {
-                alert('Error clearing clipboard: ' + error.message);
+                showErrorMessage('Error clearing clipboard: ' + error.message);
             }
         }
 
@@ -743,6 +1214,7 @@
         function updateStats(data) {
             document.getElementById('totalUsers').textContent = data.totalUsers;
             document.getElementById('totalScreenshots').textContent = data.totalScreenshots;
+            document.getElementById('totalOcrEntries').textContent = data.totalOcrEntries;
             
             if (data.users.length > 0) {
                 const latestActivity = Math.max(...data.users.map(u => new Date(u.lastActive).getTime()));
@@ -758,9 +1230,10 @@
             try {
                 await loadClipboardData();
                 showMainContent();
+                showSuccessMessage('Data refreshed successfully');
             } catch (error) {
-                alert('Failed to refresh data: ' + error.message);
                 showMainContent();
+                showErrorMessage('Failed to refresh data: ' + error.message);
             }
         }
 
@@ -797,10 +1270,23 @@
             const errorDiv = document.getElementById('accessError');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
-            // Hide error after 5 seconds
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
+
+        function showErrorMessage(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            document.querySelector('.main-content').insertBefore(errorDiv, document.querySelector('.stats-bar'));
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccessMessage(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.textContent = message;
+            document.querySelector('.main-content').insertBefore(successDiv, document.querySelector('.stats-bar'));
+            setTimeout(() => successDiv.remove(), 3000);
         }
 
         // Utility functions
@@ -808,6 +1294,11 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\            contentContainer.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
+            contentContainer.style.display = ');
         }
 
         function formatFileSize(bytes) {
@@ -820,11 +1311,11 @@
 
         // Modal handling
         document.querySelector('.close').onclick = function() {
-            document.getElementById('screenshotModal').style.display = 'none';
+            document.getElementById('contentModal').style.display = 'none';
         }
 
         window.onclick = function(event) {
-            const modal = document.getElementById('screenshotModal');
+            const modal = document.getElementById('contentModal');
             if (event.target == modal) {
                 modal.style.display = 'none';
             }
@@ -832,27 +1323,22 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // ESC to close modal
             if (e.key === 'Escape') {
-                document.getElementById('screenshotModal').style.display = 'none';
+                document.getElementById('contentModal').style.display = 'none';
+                clearSearch();
             }
-            // F5 to refresh (prevent default browser refresh)
             if (e.key === 'F5') {
                 e.preventDefault();
-                if (isAuthenticated) {
-                    refreshData();
-                }
+                if (isAuthenticated) refreshData();
             }
         });
 
-        // Auto-refresh every 30 seconds when authenticated
+        // Auto-refresh every 60 seconds when authenticated
         setInterval(() => {
             if (isAuthenticated && document.getElementById('mainContent').style.display === 'block') {
-                loadClipboardData().catch(() => {
-                    // Silent fail for auto-refresh
-                });
+                loadClipboardData().catch(() => {});
             }
-        }, 30000);
+        }, 60000);
     </script>
 </body>
 </html>
