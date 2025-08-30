@@ -655,9 +655,12 @@
         
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, checking stored auth...');
             const storedAuth = localStorage.getItem('sathelper_clipboard_authenticated');
+            console.log('Stored auth:', storedAuth);
             
             if (storedAuth === 'true') {
+                console.log('Auto-authenticating...');
                 authenticateAndLoadData();
             }
         });
@@ -665,13 +668,18 @@
         // Handle access form submission
         document.getElementById('accessForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const adminKey = document.getElementById('adminKey').value;
+            console.log('Form submitted');
+            const adminKey = document.getElementById('adminKey').value.trim();
+            console.log('Admin key entered:', adminKey);
+            console.log('Expected key:', CLIPBOARD_ADMIN_KEY);
             
             if (adminKey !== CLIPBOARD_ADMIN_KEY) {
+                console.log('Invalid key');
                 showAccessError('Invalid admin key. Access denied.');
                 return;
             }
             
+            console.log('Key is valid, authenticating...');
             isAuthenticated = true;
             localStorage.setItem('sathelper_clipboard_authenticated', 'true');
             authenticateAndLoadData();
@@ -686,14 +694,17 @@
 
         // Authenticate and load initial data
         async function authenticateAndLoadData() {
+            console.log('authenticateAndLoadData called');
             isAuthenticated = true;
             showLoading();
             try {
                 await loadClipboardData();
                 showMainContent();
             } catch (error) {
+                console.error('Failed to load data:', error);
                 showAccessError('Failed to access clipboard: ' + error.message);
                 isAuthenticated = false;
+                localStorage.removeItem('sathelper_clipboard_authenticated');
                 showLockSection();
             }
         }
@@ -704,20 +715,23 @@
                 throw new Error('Not authenticated');
             }
 
+            console.log('Loading clipboard data...');
             const response = await fetch(`${SERVER_URL}/api/clipboard?action=list-users`, {
-                method: 'POST',
+                method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-Admin-Key': CLIPBOARD_ADMIN_KEY
-                },
-                body: JSON.stringify({ adminKey: CLIPBOARD_ADMIN_KEY })
+                }
             });
+
+            console.log('Response status:', response.status);
 
             if (!response.ok) {
                 throw new Error(`Server error: ${response.status}`);
             }
 
             const result = await response.json();
+            console.log('Response data:', result);
+            
             if (!result.success) {
                 throw new Error(result.message);
             }
@@ -970,7 +984,7 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
                     </div>
                     
                     <div style="margin-top: 15px;">
-                        <button class="btn-small" onclick="copyTextToClipboard(${JSON.stringify(ocrEntry.extractedText || '')})">Copy Text</button>
+                        <button class="btn-small" onclick="copyTextToClipboard(${JSON.stringify(ocrEntry.extractedText || '').replace(/"/g, '&quot;')})">Copy Text</button>
                         <button class="btn btn-danger" onclick="deleteOcrEntry('${userId}', '${ocrEntry.id}')">Delete OCR Entry</button>
                     </div>
                 </div>
@@ -1285,8 +1299,10 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
         }
 
         function escapeRegExp(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\            contentContainer.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
-            contentContainer.style.display = ');
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\                    contentItem.innerHTML = `
+                        <img src="${SERVER_URL}/api/clipboard?action=get-screenshot&screenshotId=${item.id}&userId=${encodeURIComponent(userId)}" 
+                             alt="Screenshot ${item.id}"
+                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0');
         }
 
         function formatFileSize(bytes) {
