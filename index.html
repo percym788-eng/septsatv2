@@ -659,6 +659,9 @@
             const storedAuth = localStorage.getItem('sathelper_clipboard_authenticated');
             console.log('Stored auth:', storedAuth);
             
+            // Add test button for debugging
+            addTestButton();
+            
             if (storedAuth === 'true') {
                 console.log('Auto-authenticating...');
                 authenticateAndLoadData();
@@ -684,6 +687,32 @@
             localStorage.setItem('sathelper_clipboard_authenticated', 'true');
             authenticateAndLoadData();
         });
+
+        // Test API connection
+        async function testApiConnection() {
+            console.log('Testing API connection...');
+            try {
+                const response = await fetch(`${SERVER_URL}/api/clipboard?action=health`, {
+                    method: 'GET'
+                });
+                console.log('Health check response status:', response.status);
+                const result = await response.text();
+                console.log('Health check response:', result);
+                return response.ok;
+            } catch (error) {
+                console.error('Health check failed:', error);
+                return false;
+            }
+        }
+
+        // Add test button functionality
+        function addTestButton() {
+            const testButton = document.createElement('button');
+            testButton.textContent = 'Test API Connection';
+            testButton.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 9999; padding: 10px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;';
+            testButton.onclick = testApiConnection;
+            document.body.appendChild(testButton);
+        }
 
         // Search functionality
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
@@ -716,29 +745,46 @@
             }
 
             console.log('Loading clipboard data...');
-            const response = await fetch(`${SERVER_URL}/api/clipboard?action=list-users`, {
-                method: 'GET',
-                headers: {
-                    'X-Admin-Key': CLIPBOARD_ADMIN_KEY
-                }
-            });
-
-            console.log('Response status:', response.status);
-
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status}`);
-            }
-
-            const result = await response.json();
-            console.log('Response data:', result);
+            console.log('Server URL:', SERVER_URL);
+            console.log('Admin Key being sent:', CLIPBOARD_ADMIN_KEY);
             
-            if (!result.success) {
-                throw new Error(result.message);
-            }
+            const url = `${SERVER_URL}/api/clipboard?action=list-users`;
+            console.log('Request URL:', url);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-Admin-Key': CLIPBOARD_ADMIN_KEY,
+                        'Content-Type': 'application/json'
+                    }
+                });
 
-            allUserData = result.data.users;
-            populateUserList(result.data.users);
-            updateStats(result.data);
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                const responseText = await response.text();
+                console.log('Raw response:', responseText);
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} - ${responseText}`);
+                }
+
+                const result = JSON.parse(responseText);
+                console.log('Parsed response data:', result);
+                
+                if (!result.success) {
+                    throw new Error(result.message);
+                }
+
+                allUserData = result.data.users;
+                populateUserList(result.data.users);
+                updateStats(result.data);
+                
+            } catch (error) {
+                console.error('Detailed error in loadClipboardData:', error);
+                throw error;
+            }
         }
 
         // Populate user list based on current view mode
@@ -823,7 +869,7 @@
             buttonElement.classList.add('active');
             
             // Toggle visibility
-            if (contentContainer.style.display === 'block' && buttonElement.classList.contains('active')) {
+            if (contentContainer.style.display === 'block') {
                 contentContainer.style.display = 'none';
                 return;
             }
@@ -912,7 +958,6 @@
             const modalContainer = document.getElementById('modalContentContainer');
             
             const uploadTime = new Date(screenshot.uploadedAt).toLocaleString();
-            const sessionInfo = screenshot.sessionInfo || {};
             
             modalContainer.innerHTML = `
                 <img src="${SERVER_URL}/api/clipboard?action=get-screenshot&screenshotId=${screenshot.id}&userId=${encodeURIComponent(userId)}" 
@@ -984,7 +1029,7 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
                     </div>
                     
                     <div style="margin-top: 15px;">
-                        <button class="btn-small" onclick="copyTextToClipboard(${JSON.stringify(ocrEntry.extractedText || '').replace(/"/g, '&quot;')})">Copy Text</button>
+                        <button class="btn-small" onclick="copyTextToClipboard('${escapeHtml(ocrEntry.extractedText || '').replace(/'/g, '\\\'').replace(/\n/g, '\\n')}')">Copy Text</button>
                         <button class="btn btn-danger" onclick="deleteOcrEntry('${userId}', '${ocrEntry.id}')">Delete OCR Entry</button>
                     </div>
                 </div>
@@ -1050,7 +1095,7 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
                 `;
             } else {
                 searchResultsList.innerHTML = searchData.results.map(result => `
-                    <div class="search-result-item" onclick="showOcrModal('${result.userId}', ${JSON.stringify(result).replace(/"/g, '&quot;')})">
+                    <div class="search-result-item" onclick="showOcrModalFromSearch('${result.userId}', '${result.id}')">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                             <div>
                                 <strong>${escapeHtml(result.username)}</strong>
@@ -1076,6 +1121,45 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
             
             // Hide user list when showing search results
             document.getElementById('userList').style.display = 'none';
+        }
+
+        // Show OCR modal from search results
+        function showOcrModalFromSearch(userId, ocrId) {
+            // Find the OCR entry from our cached data
+            const user = allUserData.find(u => u.userId === userId);
+            if (!user) {
+                showErrorMessage('User data not found');
+                return;
+            }
+            
+            // We'll need to fetch the full OCR data
+            fetchAndShowOcrModal(userId, ocrId);
+        }
+
+        // Fetch and show OCR modal
+        async function fetchAndShowOcrModal(userId, ocrId) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/clipboard?action=get-user-ocr&userId=${encodeURIComponent(userId)}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Admin-Key': CLIPBOARD_ADMIN_KEY
+                    }
+                });
+
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.message);
+                }
+
+                const ocrEntry = result.data.ocrEntries.find(entry => entry.id === ocrId);
+                if (ocrEntry) {
+                    showOcrModal(userId, ocrEntry);
+                } else {
+                    showErrorMessage('OCR entry not found');
+                }
+            } catch (error) {
+                showErrorMessage('Failed to fetch OCR data: ' + error.message);
+            }
         }
 
         // Highlight search terms in text
@@ -1299,10 +1383,7 @@ ${escapeHtml(ocrEntry.extractedText || 'No text extracted')}
         }
 
         function escapeRegExp(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\                    contentItem.innerHTML = `
-                        <img src="${SERVER_URL}/api/clipboard?action=get-screenshot&screenshotId=${item.id}&userId=${encodeURIComponent(userId)}" 
-                             alt="Screenshot ${item.id}"
-                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0');
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\                populateUserContent(userId, contentType, result.data');
         }
 
         function formatFileSize(bytes) {
