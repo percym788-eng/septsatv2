@@ -7,4 +7,3 @@
 # 11:22:33:44:55:66
 #
 # Add your MAC addresses below:
-88:66:5a:46:b0:d0
