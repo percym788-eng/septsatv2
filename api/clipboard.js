@@ -23,7 +23,7 @@ let clipboardIndex = {
     lastUpdated: null
 };
 
-// AI-powered text cleaning function
+// AI-powered text cleaning function with real API integration
 async function cleanOcrTextWithAI(rawText) {
     try {
         // Check if the text appears to contain a question/quiz content
@@ -41,8 +41,23 @@ async function cleanOcrTextWithAI(rawText) {
             };
         }
 
-        // Use a simple AI-like processing approach to extract question components
-        const cleaned = await processQuestionText(rawText);
+        // Option 1: Use OpenAI API
+        if (process.env.OPENAI_API_KEY) {
+            return await processWithOpenAI(rawText);
+        }
+        
+        // Option 2: Use Google Gemini API  
+        if (process.env.GEMINI_API_KEY) {
+            return await processWithGemini(rawText);
+        }
+        
+        // Option 3: Use Anthropic Claude API
+        if (process.env.ANTHROPIC_API_KEY) {
+            return await processWithClaude(rawText);
+        }
+
+        // Fallback to rule-based processing if no API keys
+        const cleaned = await processQuestionTextRuleBased(rawText);
         return cleaned;
         
     } catch (error) {
@@ -60,8 +75,94 @@ async function cleanOcrTextWithAI(rawText) {
     }
 }
 
-// Process and clean question text
-async function processQuestionText(rawText) {
+// OpenAI API processing
+async function processWithOpenAI(rawText) {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [{
+                role: 'system',
+                content: `You are an expert at extracting clean multiple choice questions from messy OCR text. Remove all browser UI elements, URLs, timestamps, and irrelevant content. Extract only the question number, question text, and answer choices. Return JSON with: {"isQuestion": boolean, "questionNumber": number, "questionText": string, "answerChoices": [{"letter": "A", "text": "choice text"}], "confidence": 0-1}`
+            }, {
+                role: 'user',
+                content: rawText
+            }],
+            temperature: 0.1
+        })
+    });
+
+    const result = await response.json();
+    const aiResponse = JSON.parse(result.choices[0].message.content);
+    
+    return {
+        ...aiResponse,
+        originalLength: rawText.length,
+        cleanedLength: aiResponse.questionText?.length || 0
+    };
+}
+
+// Google Gemini API processing
+async function processWithGemini(rawText) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{
+                    text: `Extract a clean multiple choice question from this messy OCR text. Remove browser UI, URLs, and irrelevant content. Return only JSON: {"isQuestion": boolean, "questionNumber": number, "questionText": string, "answerChoices": [{"letter": "A", "text": "choice"}], "confidence": 0-1}\n\nOCR Text: ${rawText}`
+                }]
+            }]
+        })
+    });
+
+    const result = await response.json();
+    const aiResponse = JSON.parse(result.candidates[0].content.parts[0].text);
+    
+    return {
+        ...aiResponse,
+        originalLength: rawText.length,
+        cleanedLength: aiResponse.questionText?.length || 0
+    };
+}
+
+// Anthropic Claude API processing
+async function processWithClaude(rawText) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+            model: 'claude-3-sonnet-20240229',
+            max_tokens: 1000,
+            messages: [{
+                role: 'user',
+                content: `Extract a clean multiple choice question from this OCR text. Remove browser elements, URLs, timestamps, and clutter. Return JSON: {"isQuestion": boolean, "questionNumber": number, "questionText": string, "answerChoices": [{"letter": "A", "text": "choice"}], "confidence": 0-1}\n\nOCR Text: ${rawText}`
+            }]
+        })
+    });
+
+    const result = await response.json();
+    const aiResponse = JSON.parse(result.content[0].text);
+    
+    return {
+        ...aiResponse,
+        originalLength: rawText.length,
+        cleanedLength: aiResponse.questionText?.length || 0
+    };
+}
+
+// Fallback rule-based processing (current implementation)
+async function processQuestionTextRuleBased(rawText) {
     // Remove common browser/UI elements
     let cleanText = rawText
         .replace(/Chrome File Edit View History Bookmarks.*?(\n|$)/gi, '')
